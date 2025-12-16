@@ -1,7 +1,0 @@
-DB_HOST=localhost
-DB_NAME=u233781988_mygatebell
-DB_USER=u233781988_mygatebell
-DB_PASS=Coepd@#2026
-JWT_SECRET=APTITSolutionsMiGate@2025
-APP_ENV=production
-DEBUG=false

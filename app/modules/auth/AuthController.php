@@ -27,21 +27,21 @@ class AuthController extends BaseController
       if (!empty($errors)) {
         Response::validationError($errors);
       }
-      
+
       // Validate phone number format
       if (!empty($data['phone']) && !preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
         Response::error("Phone number must be 10-15 digits");
       }
-      
+
       // Validate password strength
       if (!empty($data['password']) && strlen($data['password']) < 8) {
         Response::error("Password must be at least 8 characters long");
       }
-      
+
       if (!empty($data['password']) && !preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).+$/', $data['password'])) {
         Response::error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
       }
-      
+
       // Validate name length
       if (!empty($data['name']) && strlen($data['name']) > 100) {
         Response::error("Name must be less than 100 characters");
@@ -69,22 +69,31 @@ class AuthController extends BaseController
       // Insert user (society_id can be NULL for super_admin)
       $societyId = isset($data['society_id']) ? $data['society_id'] : null;
       $role = $data['role'] ?? 'resident';
-      
+
       // Validate role against allowed ENUM values
       $allowedRoles = ['admin', 'resident', 'guard', 'staff', 'super_admin'];
       if (!in_array($role, $allowedRoles)) {
         Response::error("Invalid role. Allowed values: " . implode(', ', $allowedRoles));
       }
 
-      $stmt = $this->db->prepare("INSERT INTO users (name, phone, password, role, society_id) VALUES (?, ?, ?, ?, ?)");
-      $stmt->execute([
-        $data['name'],
-        $data['phone'],
-        $hashedPassword,
-        $role,
-        $societyId
-      ]);
-  
+      $fields = [
+        'name' => $data['name'],
+        'phone' => $data['phone'],
+        'password' => $hashedPassword,
+        'role' => $role,
+        'society_id' => $societyId
+      ];
+
+      if ($role === 'super_admin') {
+        $fields['status'] = 'active';
+      }
+
+      $columns = implode(', ', array_keys($fields));
+      $placeholders = implode(', ', array_fill(0, count($fields), '?')); // Create ?, ?, ... string
+
+      $stmt = $this->db->prepare("INSERT INTO users ($columns) VALUES ($placeholders)");
+      $stmt->execute(array_values($fields));
+
       $userId = $this->db->lastInsertId();
 
       // Generate token
@@ -226,7 +235,7 @@ class AuthController extends BaseController
       if (strlen($data['new_password']) < 8) {
         Response::error("New password must be at least 8 characters long");
       }
-      
+
       // Validate password strength
       if (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).+$/', $data['new_password'])) {
         Response::error("New password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
@@ -262,7 +271,7 @@ class AuthController extends BaseController
       if (empty($data['phone'])) {
         Response::error("Phone number is required");
       }
-      
+
       // Validate phone number format
       if (!empty($data['phone']) && !preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
         Response::error("Phone number must be 10-15 digits");
@@ -294,52 +303,52 @@ class AuthController extends BaseController
     // Server-side we could implement a token blacklist, but that's not implemented here
     Response::success("Logged out successfully");
   }
-  
+
   public function updateUserStatus($userId)
   {
     try {
       // Only admins can update user status
       $user = $this->auth->authorizeAny(['admin', 'super_admin']);
-      
+
       $data = json_decode(file_get_contents("php://input"), true);
-      
+
       // Validation
       if (empty($data['status'])) {
         Response::error("Status is required");
       }
-      
+
       // Validate status against allowed ENUM values
       $allowedStatuses = ['active', 'inactive', 'blocked', 'pending_verification'];
       if (!in_array($data['status'], $allowedStatuses)) {
         Response::error("Invalid status. Allowed values: " . implode(', ', $allowedStatuses));
       }
-      
+
       // Check if user exists and belongs to the same society (unless super_admin)
       $stmt = $this->db->prepare("SELECT id, society_id FROM users WHERE id = ?");
       $stmt->execute([$userId]);
       $targetUser = $stmt->fetch();
-      
+
       if (!$targetUser) {
         Response::notFound("User not found");
       }
-      
+
       // Verify permissions
       if ($user['role'] === 'admin' && $user['society_id'] != $targetUser['society_id']) {
         Response::forbidden("You can only update users in your society");
       }
-      
+
       // Update user status
       $updated = $this->update('users', [
         'status' => $data['status']
       ], 'id = :id', ['id' => $userId]);
-      
+
       if ($updated === 0) {
         Response::error("Failed to update user status", 500);
       }
-      
+
       Response::success("User status updated successfully");
-      
-    } catch(Exception $e) {
+
+    } catch (Exception $e) {
       error_log("Update user status error: " . $e->getMessage());
       Response::error("Failed to update user status: " . $e->getMessage(), 500);
     }
