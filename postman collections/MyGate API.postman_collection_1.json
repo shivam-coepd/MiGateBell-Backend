@@ -1,11 +1,11 @@
 {
 	"info": {
-		"_postman_id": "b336d791-3afc-4a61-9866-df33fd520287",
-		"name": "MyGate API Copy",
+		"_postman_id": "c983e663-5045-4135-8933-263625b5d5c3",
+		"name": "MyGate API",
 		"description": "Complete API collection for MyGate backend system",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "49167739",
-		"_collection_link": "https://shivamkhule-coepd-3140070.postman.co/workspace/CustomerMaxxCRM~74e8e0b3-1a0b-4654-a2ab-64230ce494b6/collection/49167739-b336d791-3afc-4a61-9866-df33fd520287?action=share&source=collection_link&creator=49167739"
+		"_collection_link": "https://shivamkhule-coepd-3140070.postman.co/workspace/CustomerMaxxCRM~74e8e0b3-1a0b-4654-a2ab-64230ce494b6/collection/49167739-c983e663-5045-4135-8933-263625b5d5c3?action=share&source=collection_link&creator=49167739"
 	},
 	"item": [
 		{
@@ -18,7 +18,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "// For super_admin role\n\n// {\n//   \"name\": \"Super Admin\",\n//   \"phone\": \"9876543210\",\n//   \"password\": \"123456\",\n//   \"role\": \"super_admin\"\n// }\n\n// For admin role\n\n// {\n//   \"name\": \"Society Admin\",\n//   \"phone\": \"6677889900\",\n//   \"password\": \"Pass@123\",\n//   \"society_id\": 1,\n//   \"role\": \"admin\"\n// }\n\n// for resident role\n\n{\n  \"name\": \"Shivam Khule\",\n  \"phone\": \"8010155144\",\n  \"password\": \"Pass@123\",\n  \"society_id\":1,\n  \"role\": \"resident\",\n  \"status\": \"active\"\n}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+							"raw": "// For super_admin role\n\n// {\n//   \"name\": \"Super Admin\",\n//   \"phone\": \"9876543210\",\n//   \"password\": \"123456\",\n//   \"role\": \"super_admin\"\n// }\n\n// for resident role\n\n// {\n//   \"name\": \"Shivam Khule\",\n//   \"phone\": \"8010155144\",\n//   \"password\": \"123456\",\n//   \"society_id\":1,\n//   \"role\": \"resident\",\n//   \"status\": \"pending_verification\"\n// }",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -46,7 +46,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "// Super Admin user\n// {\n//   \"phone\": \"9876543210\",\n//   \"password\": \"123456\"\n// }\n\n// Resident user\n{\n  \"phone\": \"8010155144\",\n  \"password\": \"Pass@123\"\n}",
+							"raw": "// Super Admin user\n// {\n//   \"phone\": \"9876543210\",\n//   \"password\": \"123456\"\n// }\n\n// Resident user\n{\n  \"phone\": \"8010155144\",\n  \"password\": \"123456\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -415,35 +415,6 @@
 					"response": []
 				},
 				{
-					"name": "Search Societies",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/societies/search?q=horizon&limit=10",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"societies",
-								"search"
-							],
-							"query": [
-								{
-									"key": "q",
-									"value": "horizon"
-								},
-								{
-									"key": "limit",
-									"value": "10"
-								}
-							]
-						}
-					},
-					"response": []
-				},
-				{
 					"name": "Get Society By ID",
 					"request": {
 						"method": "GET",
@@ -516,7 +487,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/admin/societies/14",
+							"raw": "{{base_url}}/api/admin/societies/1",
 							"host": [
 								"{{base_url}}"
 							],
@@ -524,7 +495,7 @@
 								"api",
 								"admin",
 								"societies",
-								"14"
+								"1"
 							]
 						}
 					},
@@ -543,7 +514,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Building A\",\n  \"society_id\": 1,\n  \"total_floors\": 6,\n  \"description\": \"Residential building under construction\"\n}",
+							"raw": "{\n  \"name\": \"Building A\",\n  \"society_id\": 1,\n  \"total_floors\": 3,\n  \"description\": \"Main residential building\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -596,7 +567,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"building_id\": 2,\n  \"flats\": [\n    {\n      \"flat_number\": \"101\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"102\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"103\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"104\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"105\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"201\",\n      \"floor_number\": \"2\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"202\",\n      \"floor_number\": \"2\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"203\",\n      \"floor_number\": \"2\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"204\",\n      \"floor_number\": \"2\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"205\",\n      \"floor_number\": \"2\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"301\",\n      \"floor_number\": \"3\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"302\",\n      \"floor_number\": \"3\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"303\",\n      \"floor_number\": \"3\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"304\",\n      \"floor_number\": \"3\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"305\",\n      \"floor_number\": \"3\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"401\",\n      \"floor_number\": \"4\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"402\",\n      \"floor_number\": \"4\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"403\",\n      \"floor_number\": \"4\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"404\",\n      \"floor_number\": \"4\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"405\",\n      \"floor_number\": \"4\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"501\",\n      \"floor_number\": \"5\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"502\",\n      \"floor_number\": \"5\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"503\",\n      \"floor_number\": \"5\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"504\",\n      \"floor_number\": \"5\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"505\",\n      \"floor_number\": \"5\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"601\",\n      \"floor_number\": \"6\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"602\",\n      \"floor_number\": \"6\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"603\",\n      \"floor_number\": \"6\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"604\",\n      \"floor_number\": \"6\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"605\",\n      \"floor_number\": \"6\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"701\",\n      \"floor_number\": \"7\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"702\",\n      \"floor_number\": \"7\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"703\",\n      \"floor_number\": \"7\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"704\",\n      \"floor_number\": \"7\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"705\",\n      \"floor_number\": \"7\",\n      \"area_sqft\": 1150\n    },\n    {\n      \"flat_number\": \"801\",\n      \"floor_number\": \"8\",\n      \"area_sqft\": 1050\n    },\n    {\n      \"flat_number\": \"802\",\n      \"floor_number\": \"8\",\n      \"area_sqft\": 950\n    },\n    {\n      \"flat_number\": \"803\",\n      \"floor_number\": \"8\",\n      \"area_sqft\": 1100\n    },\n    {\n      \"flat_number\": \"804\",\n      \"floor_number\": \"8\",\n      \"area_sqft\": 1000\n    },\n    {\n      \"flat_number\": \"805\",\n      \"floor_number\": \"8\",\n      \"area_sqft\": 1150\n    }\n  ]\n}",
+							"raw": "{\n  \"building_id\": 1,\n  \"flats\": [\n    {\n      \"flat_number\": \"101\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1200\n    },\n    {\n      \"flat_number\": \"102\",\n      \"floor_number\": \"1\",\n      \"area_sqft\": 1100\n    }\n  ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -629,7 +600,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"building_id\": 4,\n  \"floors\": [\n    {\n      \"floor_number\": \"1\",\n      \"flats\": 4,\n      \"area_sqft\": 1200\n    },\n    {\n      \"floor_number\": \"2\",\n      \"flats\": 4,\n      \"area_sqft\": 1150\n    }\n  ]\n}",
+							"raw": "{\n  \"building_id\": 1,\n  \"floors\": [\n    {\n      \"floor_number\": \"1\",\n      \"flats\": 4,\n      \"area_sqft\": 1200\n    },\n    {\n      \"floor_number\": \"2\",\n      \"flats\": 4,\n      \"area_sqft\": 1150\n    }\n  ]\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -655,7 +626,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/flats/by-building/3",
+							"raw": "{{base_url}}/api/flats/by-building/1",
 							"host": [
 								"{{base_url}}"
 							],
@@ -663,7 +634,7 @@
 								"api",
 								"flats",
 								"by-building",
-								"3"
+								"1"
 							]
 						}
 					},
@@ -1317,7 +1288,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"booking_date\": \"2025-12-17\",\n  \"start_time\": \"10:00:00\",\n  \"end_time\": \"12:00:00\"\n}",
+							"raw": "{\n  \"booking_date\": \"2023-06-20\",\n  \"start_time\": \"10:00:00\",\n  \"end_time\": \"12:00:00\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
