@@ -60,12 +60,12 @@ class UserController extends BaseController
         $data = [];
 
         // Flats
-        $stmt = $this->db->prepare("
-      SELECT f.id, f.flat_number, f.block, f.floor_number, b.name as building_name
-      FROM flats f
-      LEFT JOIN buildings b ON f.building_id = b.id
-      WHERE f.owner_id = ? OR f.tenant_id = ?
-    ");
+        //     $stmt = $this->db->prepare("
+        //   SELECT f.id, f.flat_number, f.block, f.floor_number, b.name as building_name
+        //   FROM flats f
+        //   LEFT JOIN buildings b ON f.building_id = b.id
+        //   WHERE f.owner_id = ? OR f.tenant_id = ?
+        // ");
         // Check if 'block' column exists in flats, earlier schema didn't show it but 'building_name' via join.
         // Re-checking schema: flats has building_id. buildings has name.
         // I will use valid schema columns.

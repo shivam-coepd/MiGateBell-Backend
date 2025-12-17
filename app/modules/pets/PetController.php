@@ -7,7 +7,9 @@ class PetController extends BaseController
     public function getPetTypes()
     {
         try {
+            // Ensure the user is authenticated (optional, can be public)
             $this->auth->authenticate();
+
             $stmt = $this->db->query("SELECT * FROM pet_types");
             Response::success("Pet types retrieved", $stmt->fetchAll());
         } catch (Exception $e) {
@@ -15,6 +17,30 @@ class PetController extends BaseController
         }
     }
 
+    public function addPetType()
+    {
+        try {
+            $this->auth->authenticate();
+            $data = json_decode(file_get_contents("php://input"), true);
+            // Validate required fields
+            $errors = $this->validateRequiredFields($data, ['name']);
+            if (!empty($errors)) {
+                Response::validationError($errors);
+                return;
+            }
+            // Insert new pet type
+            $petTypeId = $this->insert('pet_types', [
+                'name' => $data['name'],
+                'description' => $data['description'] ?? ''
+            ]);
+            Response::success("Pet type added successfully", ['pet_type_id' => $petTypeId], 201);
+        } catch (Exception $e) {
+            error_log("Add pet type error: " . $e->getMessage());
+            Response::error("Failed to add pet type: " . $e->getMessage(), 500);
+        }
+    }
+
+    // Updated addPet to verify pet_type_id exists
     public function addPet()
     {
         try {
@@ -22,9 +48,17 @@ class PetController extends BaseController
             $data = json_decode(file_get_contents("php://input"), true);
 
             $errors = $this->validateRequiredFields($data, ['name', 'pet_type_id']);
-            if (!empty($errors))
+            if (!empty($errors)) {
                 Response::validationError($errors);
-
+                return;
+            }
+            // Verify pet_type_id exists
+            $stmt = $this->db->prepare("SELECT id FROM pet_types WHERE id = ?");
+            $stmt->execute([$data['pet_type_id']]);
+            if (!$stmt->fetch()) {
+                Response::error("Invalid pet_type_id: type does not exist", 400);
+                return;
+            }
             $petId = $this->insert('pets', [
                 'resident_id' => $user['uid'],
                 'pet_type_id' => $data['pet_type_id'],
@@ -37,9 +71,7 @@ class PetController extends BaseController
                 'image_url' => $data['image_url'] ?? '',
                 'notes' => $data['notes'] ?? ''
             ]);
-
             Response::success("Pet added successfully", ['pet_id' => $petId], 201);
-
         } catch (Exception $e) {
             error_log("Add pet error: " . $e->getMessage());
             Response::error("Failed to add pet: " . $e->getMessage(), 500);

@@ -2270,6 +2270,33 @@
           }
         },
         {
+          "name": "Add Pet Types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dog\",\n  \"description\": \"German Shepherd\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/pets/types",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pets", "types"]
+            }
+          }
+        },
+        {
           "name": "Add Pet",
           "request": {
             "method": "POST",

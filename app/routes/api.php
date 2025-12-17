@@ -431,6 +431,9 @@ try {
     if ($uri === '/api/pets/types' && $method === 'GET') {
         (new PetController)->getPetTypes();
     }
+    if ($uri === '/api/pets/types' && $method === 'POST') {
+        (new PetController)->addPetType();
+    }
     if ($uri === '/api/pets' && $method === 'POST') {
         (new PetController)->addPet();
     }
