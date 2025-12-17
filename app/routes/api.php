@@ -28,6 +28,7 @@ require_once __DIR__ . '/../modules/assets/AssetController.php';
 require_once __DIR__ . '/../modules/notifications/NotificationController.php';
 require_once __DIR__ . '/../modules/family/FamilyController.php';
 require_once __DIR__ . '/../modules/admin/UserManagementController.php';
+require_once __DIR__ . '/../modules/flats/FlatController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -506,6 +507,17 @@ try {
     }
     if (preg_match('/^\/api\/admin\/users\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
         (new UserManagementController)->deleteUser($matches[1]);
+    }
+
+    // Flat Routes
+    if ($uri === '/api/flat/add-home' && $method === 'POST') {
+        (new FlatController)->addHome();
+    }
+    if (preg_match('/^\/api\/flats\/buildings\/by-society\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
+        (new FlatController)->getBuildingsBySociety($matches[1]);
+    }
+    if (preg_match('/^\/api\/flats\/by-building\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
+        (new FlatController)->getFlatsByBuilding($matches[1]);
     }
 
     // If no route matched, return 404
