@@ -1832,6 +1832,52 @@
       "name": "Vehicles",
       "item": [
         {
+          "name": "Get Vehicle Types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/vehicles/types",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vehicles", "types"]
+            }
+          }
+        },
+        {
+          "name": "Add Vehicle Types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"KA01AB1234\",\n  \"description\": \"Monthly Charge for KA01AB1234\",\n \"monthly_charge\": 1000,\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vehicles/types",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vehicles", "types"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Add Vehicle",
           "request": {
             "method": "POST",
