@@ -355,6 +355,14 @@ try {
     }
 
     // Vehicle routes
+    if ($uri === '/api/vehicles/types' && $method === 'POST') {
+        (new VehicleController)->addVehicleType();
+    }
+
+    if ($uri === '/api/vehicles/types' && $method === 'GET') {
+        (new VehicleController)->getVehicleTypes();
+    }
+
     if ($uri === '/api/vehicles' && $method === 'POST') {
         (new VehicleController)->addVehicle();
     }
