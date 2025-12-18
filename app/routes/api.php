@@ -29,6 +29,7 @@ require_once __DIR__ . '/../modules/notifications/NotificationController.php';
 require_once __DIR__ . '/../modules/family/FamilyController.php';
 require_once __DIR__ . '/../modules/admin/UserManagementController.php';
 require_once __DIR__ . '/../modules/flats/FlatController.php';
+require_once __DIR__ . '/../modules/locations/LocationController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -80,6 +81,9 @@ if (strpos($uri, '/api/') !== 0) {
 
 // DEBUG: Log final processed URI
 // error_log("Final processed URI: '" . $uri . "' | Method: " . $method);
+
+// Initialize location controller
+$locationController = new LocationController();
 
 // Route matching
 try {
@@ -176,6 +180,19 @@ try {
     // Live search societies endpoint
     if ($uri === '/api/societies/search' && $method === 'GET') {
         (new AdminController)->searchSocieties();
+    }
+
+    // Location endpoints
+    if ($uri === '/api/locations/countries' && $method === 'GET') {
+        $locationController->getCountries();
+    }
+
+    if ($uri === '/api/locations/cities' && $method === 'GET') {
+        $locationController->getCities();
+    }
+
+    if (preg_match('/^\/api\/locations\/cities\/by-country\/([^\/]+)$/', $uri, $matches) && $method === 'GET') {
+        $locationController->getCitiesByCountry($matches[1]);
     }
 
     // Buildings endpoints

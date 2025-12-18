@@ -83,21 +83,48 @@ class AdminController extends BaseController {
       
       $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
       $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+      $city = isset($_GET['city']) ? $_GET['city'] : null;
       
       $pagination = $this->paginate($page, $limit);
       
+      // Build query based on filters
+      $whereClause = "";
+      $params = [];
+      
+      if ($city) {
+        $whereClause = "WHERE city = ?";
+        $params[] = $city;
+      }
+      
       // Get total count
-      $countStmt = $this->db->query("SELECT COUNT(*) as count FROM societies");
+      $countQuery = "SELECT COUNT(*) as count FROM societies " . $whereClause;
+      $countStmt = $this->db->prepare($countQuery);
+      if ($params) {
+        $countStmt->execute($params);
+      } else {
+        $countStmt->execute();
+      }
       $total = $countStmt->fetch()['count'];
       
       // Get societies
-      $stmt = $this->db->prepare("
+      $query = "
         SELECT id, name, address, city, state, country, pincode, 
                contact_person, contact_phone, contact_email, created_at
         FROM societies
+        " . $whereClause . "
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
-      ");
+      ";
+      
+      $stmt = $this->db->prepare($query);
+      
+      // Bind filter parameters
+      $paramIndex = 1;
+      foreach ($params as $param) {
+        $stmt->bindValue($paramIndex++, $param);
+      }
+      
+      // Bind pagination parameters
       $stmt->bindValue(':limit', $pagination['limit'], PDO::PARAM_INT);
       $stmt->bindValue(':offset', $pagination['offset'], PDO::PARAM_INT);
       $stmt->execute();
