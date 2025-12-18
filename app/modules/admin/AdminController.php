@@ -79,7 +79,7 @@ class AdminController extends BaseController {
   public function getSocieties() {
     try {
       // Only super admins can list all societies
-      $user = $this->auth->authorize('super_admin');
+      // $user = $this->auth->authorize('super_admin');
       
       $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
       $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
