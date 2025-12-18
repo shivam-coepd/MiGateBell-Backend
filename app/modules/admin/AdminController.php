@@ -99,7 +99,7 @@ class AdminController extends BaseController {
       // Get total count
       $countQuery = "SELECT COUNT(*) as count FROM societies " . $whereClause;
       $countStmt = $this->db->prepare($countQuery);
-      if ($params) {
+      if (!empty($params)) {
         $countStmt->execute($params);
       } else {
         $countStmt->execute();
@@ -113,21 +113,15 @@ class AdminController extends BaseController {
         FROM societies
         " . $whereClause . "
         ORDER BY created_at DESC
-        LIMIT :limit OFFSET :offset
+        LIMIT ? OFFSET ?
       ";
       
+      // Add pagination parameters to the params array
+      $params[] = $pagination['limit'];
+      $params[] = $pagination['offset'];
+      
       $stmt = $this->db->prepare($query);
-      
-      // Bind filter parameters
-      $paramIndex = 1;
-      foreach ($params as $param) {
-        $stmt->bindValue($paramIndex++, $param);
-      }
-      
-      // Bind pagination parameters
-      $stmt->bindValue(':limit', $pagination['limit'], PDO::PARAM_INT);
-      $stmt->bindValue(':offset', $pagination['offset'], PDO::PARAM_INT);
-      $stmt->execute();
+      $stmt->execute($params);
       $societies = $stmt->fetchAll();
       
       $this->sendPaginatedResponse($societies, $total, $pagination, "Societies retrieved successfully");
