@@ -502,11 +502,24 @@ try {
     if ($uri === '/api/family' && $method === 'GET') {
         (new FamilyController)->getFamilyMembers();
     }
+
     if ($uri === '/api/family' && $method === 'POST') {
         (new FamilyController)->addFamilyMember();
     }
+
+    // Update family member details
+    if (preg_match('/^\/api\/family\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new FamilyController)->updateFamilyMember($matches[1]);
+    }
+
+    // Soft delete family member
     if (preg_match('/^\/api\/family\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
         (new FamilyController)->deleteFamilyMember($matches[1]);
+    }
+
+    // Activate / Deactivate family member
+    if (preg_match('/^\/api\/family\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
+        (new FamilyController)->changeFamilyMemberStatus($matches[1]);
     }
 
     // User Management Routes (Admin)
