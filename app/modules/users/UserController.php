@@ -70,8 +70,22 @@ class UserController extends BaseController
         // Re-checking schema: flats has building_id. buildings has name.
         // I will use valid schema columns.
 
+        // Family Members
         $stmt = $this->db->prepare("
-      SELECT f.id, f.flat_number, f.floor_number, f.area_sqft, f.is_occupied, b.name as building_name
+    SELECT fm.id, fm.name, fm.relation, fm.phone, fm.image_url, fm.is_active, 
+    u.name AS resident_name, u.email AS resident_email
+    FROM family_members fm
+    LEFT JOIN users u ON fm.resident_id = u.id
+    WHERE fm.resident_id = ?
+    ");
+        $stmt->execute([$userId]);
+        $data['family_members'] = $stmt->fetchAll();
+
+
+        // Flats
+        $stmt = $this->db->prepare("
+      SELECT f.id, f.flat_number, f.floor_number, f.area_sqft, f.is_occupied, 
+      b.name as building_name
       FROM flats f
       LEFT JOIN buildings b ON f.building_id = b.id
       WHERE f.owner_id = ? OR f.tenant_id = ?
