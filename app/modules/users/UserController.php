@@ -59,24 +59,13 @@ class UserController extends BaseController
     {
         $data = [];
 
-        // Flats
-        //     $stmt = $this->db->prepare("
-        //   SELECT f.id, f.flat_number, f.block, f.floor_number, b.name as building_name
-        //   FROM flats f
-        //   LEFT JOIN buildings b ON f.building_id = b.id
-        //   WHERE f.owner_id = ? OR f.tenant_id = ?
-        // ");
-        // Check if 'block' column exists in flats, earlier schema didn't show it but 'building_name' via join.
-        // Re-checking schema: flats has building_id. buildings has name.
-        // I will use valid schema columns.
-
         // Family Members
         $stmt = $this->db->prepare("
-    SELECT fm.id, fm.name, fm.relation, fm.phone, fm.image_url, fm.is_active, 
-    u.name AS resident_name, u.email AS resident_email
-    FROM family_members fm
-    LEFT JOIN users u ON fm.resident_id = u.id
-    WHERE fm.resident_id = ?
+      SELECT fm.id, fm.name, fm.relation, fm.phone, fm.image_url, fm.is_active, 
+      u.name AS resident_name, u.email AS resident_email
+      FROM family_members fm
+      LEFT JOIN users u ON fm.resident_id = u.id
+      WHERE fm.resident_id = ?
     ");
         $stmt->execute([$userId]);
         $data['family_members'] = $stmt->fetchAll();
@@ -103,10 +92,22 @@ class UserController extends BaseController
         $stmt->execute([$userId]);
         $data['vehicles'] = $stmt->fetchAll();
 
-        // Pets
-        $stmt = $this->db->prepare("SELECT * FROM pets WHERE resident_id = ?");
+        // // Pets
+        // $stmt = $this->db->prepare("SELECT * FROM pets WHERE resident_id = ?");
+        // $stmt->execute([$userId]);
+        // $data['pets'] = $stmt->fetchAll();
+        // Pets (with Pet Type data)
+        $stmt = $this->db->prepare("
+      SELECT p.id, p.name, p.breed, p.age, p.weight, p.vaccination_status, p.image_url, p.notes, p.is_active, p.created_at,
+      pt.id AS pet_type_id, pt.name AS pet_type_name, pt.description AS pet_type_description
+      FROM pets p
+      LEFT JOIN pet_types pt ON p.pet_type_id = pt.id
+      WHERE p.resident_id = ? AND p.is_active = 1
+      ORDER BY p.created_at DESC
+    ");
         $stmt->execute([$userId]);
         $data['pets'] = $stmt->fetchAll();
+
 
         // Family Members / Co-residents (Users in same flats)
         if (!empty($data['flats'])) {
