@@ -98,7 +98,7 @@ class UserController extends BaseController
         // $data['pets'] = $stmt->fetchAll();
         // Pets (with Pet Type data)
         $stmt = $this->db->prepare("
-      SELECT p.id, p.name, p.breed, p.age, p.weight, p.vaccination_status, p.image_url, p.notes, p.is_active, p.created_at,
+      SELECT p.id, p.resident_id, p.name, p.breed, p.age, p.weight, p.vaccination_status, p.image_url, p.notes, p.society_id, p.is_active, p.created_at,
       pt.id AS pet_type_id, pt.name AS pet_type_name, pt.description AS pet_type_description
       FROM pets p
       LEFT JOIN pet_types pt ON p.pet_type_id = pt.id
