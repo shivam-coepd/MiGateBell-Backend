@@ -128,4 +128,136 @@ class FamilyController extends BaseController
             Response::error("Failed to remove family member: " . $e->getMessage(), 500);
         }
     }
+
+    public function updateFamilyMember($id)
+    {
+        try {
+            $user = $this->auth->authenticate();
+
+            // Fetch member with ownership details
+            $stmt = $this->db->prepare("
+            SELECT fm.id, fm.resident_id, u.society_id
+            FROM family_members fm
+            JOIN users u ON fm.resident_id = u.id
+            WHERE fm.id = ? AND fm.is_active = 1
+        ");
+            $stmt->execute([$id]);
+            $member = $stmt->fetch();
+
+            if (!$member) {
+                Response::notFound("Family member not found");
+            }
+
+            // Authorization
+            if ($user['role'] === 'resident' && $member['resident_id'] != $user['uid']) {
+                Response::forbidden("Unauthorized");
+            }
+
+            if ($user['role'] === 'admin' && $member['society_id'] != $user['society_id']) {
+                Response::forbidden("Unauthorized");
+            }
+
+            // Read input
+            $data = json_decode(file_get_contents("php://input"), true);
+            if (empty($data)) {
+                Response::validationError(["No data provided"]);
+            }
+
+            // Prepare update data
+            $allowedFields = ['name', 'relation', 'phone', 'image_url', 'is_active'];
+            $updateData = [];
+
+            foreach ($allowedFields as $field) {
+                if (isset($data[$field])) {
+                    $updateData[$field] = $data[$field];
+                }
+            }
+
+            if (empty($updateData)) {
+                Response::validationError(["Nothing to update"]);
+            }
+
+            // Update
+            $this->update(
+                'family_members',
+                $updateData,
+                'id = :id',
+                ['id' => $id]
+            );
+
+            Response::success("Family member updated successfully");
+
+        } catch (Exception $e) {
+            Response::error("Failed to update family member: " . $e->getMessage(), 500);
+        }
+    }
+
+    public function changeFamilyMemberStatus($id)
+    {
+        try {
+            $user = $this->auth->authenticate();
+
+            // Fetch family member with ownership & society
+            $stmt = $this->db->prepare("
+            SELECT fm.id, fm.resident_id, u.society_id, fm.is_active
+            FROM family_members fm
+            JOIN users u ON fm.resident_id = u.id
+            WHERE fm.id = ?
+        ");
+            $stmt->execute([$id]);
+            $member = $stmt->fetch();
+
+            if (!$member) {
+                Response::notFound("Family member not found");
+            }
+
+            // Authorization
+            if ($user['role'] === 'resident' && $member['resident_id'] != $user['uid']) {
+                Response::forbidden("Unauthorized");
+            }
+
+            if ($user['role'] === 'admin' && $member['society_id'] != $user['society_id']) {
+                Response::forbidden("Unauthorized");
+            }
+
+            // Read input
+            $data = json_decode(file_get_contents("php://input"), true);
+
+            if (!isset($data['is_active'])) {
+                Response::validationError(["is_active is required"]);
+            }
+
+            $isActive = (int) $data['is_active'];
+
+            if (!in_array($isActive, [0, 1])) {
+                Response::validationError(["is_active must be 0 or 1"]);
+            }
+
+            // Prevent unnecessary update
+            if ((int) $member['is_active'] === $isActive) {
+                Response::success("Status already updated", [
+                    'is_active' => $member['is_active']
+                ]);
+            }
+
+            // Update status
+            $this->update(
+                'family_members',
+                ['is_active' => $isActive],
+                'id = :id',
+                ['id' => $id]
+            );
+
+            Response::success(
+                $isActive ? "Family member activated" : "Family member deactivated",
+                ['is_active' => $isActive]
+            );
+
+        } catch (Exception $e) {
+            Response::error(
+                "Failed to change family member status: " . $e->getMessage(),
+                500
+            );
+        }
+    }
 }
