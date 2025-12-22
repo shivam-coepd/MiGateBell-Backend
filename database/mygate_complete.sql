@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS societies (
 
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    app_user_id CHAR(9) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE,
     phone VARCHAR(15) UNIQUE,
@@ -34,6 +35,11 @@ CREATE TABLE IF NOT EXISTS users (
     society_id INT,
     profile_image VARCHAR(255),
     status ENUM('active','inactive','blocked','pending_verification') DEFAULT 'pending_verification',
+    cover_image_url VARCHAR(255) NULL DEFAULT NULL COMMENT 'URL for user cover/banner image',
+    resident_type ENUM('owner', 'tenant', 'family_member', 'other') NULL DEFAULT NULL COMMENT 'Type of resident',
+    bio TEXT NULL DEFAULT NULL COMMENT 'Short biography or about section',
+    profession VARCHAR(150) NULL DEFAULT NULL COMMENT 'Profession or work',
+    hometown VARCHAR(150) NULL DEFAULT NULL COMMENT 'Hometown or place of origin',
     google_id VARCHAR(255) UNIQUE,
     facebook_id VARCHAR(255) UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../helpers/jwt_helper.php';
+require_once __DIR__ . '/../../helpers/AppUserIdHelper.php';
 require_once __DIR__ . '/../../core/BaseController.php';
 
 class AuthController extends BaseController
@@ -76,7 +77,10 @@ class AuthController extends BaseController
         Response::error("Invalid role. Allowed values: " . implode(', ', $allowedRoles));
       }
 
+      $appUserId = AppUserIdHelper::generateUnique($this->db);
+
       $fields = [
+        'app_user_id' => $appUserId,
         'name' => $data['name'],
         'phone' => $data['phone'],
         'password' => $hashedPassword,
@@ -112,6 +116,7 @@ class AuthController extends BaseController
 
       Response::success("Registration successful", [
         'user_id' => $userId,
+        'app_user_id' => $appUserId,
         'token' => $token
       ], 201);
 
@@ -132,7 +137,11 @@ class AuthController extends BaseController
       }
 
       // Get user
-      $stmt = $this->db->prepare("SELECT id, name, phone, password, role, society_id FROM users WHERE phone = ?");
+      $stmt = $this->db->prepare(
+        "SELECT id, app_user_id, name, phone, password, role, society_id 
+     FROM users WHERE phone = ?"
+      );
+
       $stmt->execute([$data['phone']]);
       $user = $stmt->fetch();
 
@@ -157,6 +166,7 @@ class AuthController extends BaseController
       Response::success("Login successful", [
         'user' => [
           'id' => $user['id'],
+          'app_user_id' => $user['app_user_id'],
           'name' => $user['name'],
           'phone' => $user['phone'],
           'role' => $user['role'],
