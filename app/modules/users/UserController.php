@@ -57,10 +57,10 @@ class UserController extends BaseController
             /* ===================== FINAL CLEANUP ===================== */
 
             // Remove null values from main profile
-            $profile = array_filter(
-                $profile,
-                fn($value) => $value !== null
-            );
+            // $profile = array_filter(
+            //     $profile,
+            //     fn($value) => $value !== null
+            // );
 
             Response::success("Profile retrieved successfully", $profile);
 
