@@ -5,7 +5,7 @@ class Uploader
   private $allowedTypes;
   private $maxFileSize;
 
-  public function __construct($uploadDir = '../uploads/')
+  public function __construct($uploadDir = './uploads/')
   {
     $this->uploadDir = $uploadDir;
     $this->allowedTypes = [

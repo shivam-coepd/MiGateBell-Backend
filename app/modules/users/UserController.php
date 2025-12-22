@@ -54,6 +54,14 @@ class UserController extends BaseController
                     break;
             }
 
+            /* ===================== FINAL CLEANUP ===================== */
+
+            // Remove null values from main profile
+            $profile = array_filter(
+                $profile,
+                fn($value) => $value !== null
+            );
+
             Response::success("Profile retrieved successfully", $profile);
 
         } catch (Exception $e) {

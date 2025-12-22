@@ -107,7 +107,7 @@ class FlatController extends BaseController {
                 }
                 
                 // Upload document
-                $uploader = new Uploader('../uploads/');
+                $uploader = new Uploader('./uploads/');
                 $uploadResult = $uploader->uploadFile($_FILES['document'], 'verification');
                 $documentUrl = $uploadResult['path'];
             } else {
