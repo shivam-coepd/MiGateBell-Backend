@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../helpers/jwt_helper.php';
-require_once __DIR__ . '/../../helpers/AppUserIdHelper.php';
+require_once __DIR__ . '/../../helpers/app_userID_helper.php';
 require_once __DIR__ . '/../../core/BaseController.php';
 
 class AuthController extends BaseController
