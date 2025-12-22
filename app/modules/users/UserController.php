@@ -160,6 +160,49 @@ class UserController extends BaseController
         return $data;
     }
 
+    // public function updateProfile()
+    // {
+    //     try {
+    //         $user = $this->auth->authenticate();
+    //         $userId = $user['uid'];
+
+    //         $data = json_decode(file_get_contents("php://input"), true);
+
+    //         // Allowed fields to update
+    //         $allowedFields = ['name', 'email', 'profile_image'];
+    //         $updateData = [];
+
+    //         foreach ($allowedFields as $field) {
+    //             if (isset($data[$field])) {
+    //                 $updateData[$field] = $data[$field];
+    //             }
+    //         }
+
+    //         if (empty($updateData)) {
+    //             Response::error("No valid fields to update");
+    //         }
+
+    //         // Validate email if present
+    //         if (isset($updateData['email']) && !filter_var($updateData['email'], FILTER_VALIDATE_EMAIL)) {
+    //             Response::error("Invalid email format");
+    //         }
+
+    //         // Update user
+    //         $updated = $this->update('users', $updateData, 'id = :id', ['id' => $userId]);
+
+    //         if ($updated === 0) {
+    //             // It might be 0 if data is same
+    //             // Response::success("Profile is already up to date");
+    //         }
+
+    //         Response::success("Profile updated successfully");
+
+    //     } catch (Exception $e) {
+    //         error_log("Update profile error: " . $e->getMessage());
+    //         Response::error("Failed to update profile: " . $e->getMessage(), 500);
+    //     }
+    // }
+
     public function updateProfile()
     {
         try {
@@ -169,11 +212,21 @@ class UserController extends BaseController
             $data = json_decode(file_get_contents("php://input"), true);
 
             // Allowed fields to update
-            $allowedFields = ['name', 'email', 'profile_image'];
+            $allowedFields = [
+                'name',
+                'email',
+                'profile_image',
+                'cover_image_url',
+                'resident_type',
+                'bio',
+                'profession',
+                'hometown'
+            ];
+
             $updateData = [];
 
             foreach ($allowedFields as $field) {
-                if (isset($data[$field])) {
+                if (array_key_exists($field, $data)) {
                     $updateData[$field] = $data[$field];
                 }
             }
@@ -182,18 +235,64 @@ class UserController extends BaseController
                 Response::error("No valid fields to update");
             }
 
-            // Validate email if present
-            if (isset($updateData['email']) && !filter_var($updateData['email'], FILTER_VALIDATE_EMAIL)) {
+            /* ===================== VALIDATIONS ===================== */
+
+            // Name validation
+            if (isset($updateData['name']) && strlen($updateData['name']) > 100) {
+                Response::error("Name must be less than 100 characters");
+            }
+
+            // Email validation
+            if (
+                isset($updateData['email']) &&
+                !filter_var($updateData['email'], FILTER_VALIDATE_EMAIL)
+            ) {
                 Response::error("Invalid email format");
             }
 
-            // Update user
-            $updated = $this->update('users', $updateData, 'id = :id', ['id' => $userId]);
-
-            if ($updated === 0) {
-                // It might be 0 if data is same
-                // Response::success("Profile is already up to date");
+            // Resident type validation
+            if (isset($updateData['resident_type'])) {
+                $allowedResidentTypes = ['owner', 'tenant', 'family_member', 'other'];
+                if (!in_array($updateData['resident_type'], $allowedResidentTypes)) {
+                    Response::error(
+                        "Invalid resident_type. Allowed values: " .
+                        implode(', ', $allowedResidentTypes)
+                    );
+                }
             }
+
+            // Bio length (optional but recommended)
+            if (isset($updateData['bio']) && strlen($updateData['bio']) > 500) {
+                Response::error("Bio must be less than 500 characters");
+            }
+
+            // Profession length
+            if (isset($updateData['profession']) && strlen($updateData['profession']) > 150) {
+                Response::error("Profession must be less than 150 characters");
+            }
+
+            // Hometown length
+            if (isset($updateData['hometown']) && strlen($updateData['hometown']) > 150) {
+                Response::error("Hometown must be less than 150 characters");
+            }
+
+            // Image URL length (basic sanity check)
+            // if (isset($updateData['profile_image']) && strlen($updateData['profile_image']) > 255) {
+            //     Response::error("Profile image URL is too long");
+            // }
+
+            // if (isset($updateData['cover_image_url']) && strlen($updateData['cover_image_url']) > 255) {
+            //     Response::error("Cover image URL is too long");
+            // }
+
+            /* ===================== UPDATE ===================== */
+
+            $updated = $this->update(
+                'users',
+                $updateData,
+                'id = :id',
+                ['id' => $userId]
+            );
 
             Response::success("Profile updated successfully");
 
@@ -202,4 +301,5 @@ class UserController extends BaseController
             Response::error("Failed to update profile: " . $e->getMessage(), 500);
         }
     }
+
 }
