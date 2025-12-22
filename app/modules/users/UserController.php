@@ -12,11 +12,18 @@ class UserController extends BaseController
             $role = $user['role'];
 
             // Fetch basic user details
+            //     $stmt = $this->db->prepare("
+            //     SELECT id, name, email, phone, role, society_id, profile_image, status, created_at
+            //     FROM users 
+            //     WHERE id = ?
+            // ");
+            // Fetch basic user details
             $stmt = $this->db->prepare("
-        SELECT id, name, email, phone, role, society_id, profile_image, status, created_at
-        FROM users 
-        WHERE id = ?
-      ");
+                SELECT id, app_user_id, name, email, phone, role, society_id, profile_image, cover_image_url, resident_type, bio, profession, hometown, status, created_at
+                FROM users 
+                WHERE id = ?
+            ");
+
             $stmt->execute([$userId]);
             $profile = $stmt->fetch();
 
