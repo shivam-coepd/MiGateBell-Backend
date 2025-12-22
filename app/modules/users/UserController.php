@@ -294,7 +294,7 @@ class UserController extends BaseController
                 ['id' => $userId]
             );
 
-            Response::success("Profile updated successfully");
+            Response::success("Profile updated successfully", $updateData);
 
         } catch (Exception $e) {
             error_log("Update profile error: " . $e->getMessage());
