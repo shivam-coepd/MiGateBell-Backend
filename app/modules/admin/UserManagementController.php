@@ -239,7 +239,7 @@ class UserManagementController extends BaseController
                 Response::error("No valid fields to update");
 
             $this->update('users', $updateData, 'id = :id', ['id' => $id]);
-            Response::success("User updated successfully");
+            Response::success("User updated successfully", $updateData);
 
         } catch (Exception $e) {
             error_log("Update user error: " . $e->getMessage());

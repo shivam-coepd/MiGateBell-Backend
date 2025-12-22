@@ -235,7 +235,7 @@ class AdminController extends BaseController
         Response::error("Society not found or no changes made", 404);
       }
 
-      Response::success("Society updated successfully");
+      Response::success("Society updated successfully", $updateData);
 
     } catch (Exception $e) {
       error_log("Update society error: " . $e->getMessage());

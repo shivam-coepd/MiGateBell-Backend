@@ -235,7 +235,7 @@ class VisitorsController extends BaseController {
         Response::error("Failed to update visitor status", 500);
       }
       
-      Response::success("Visitor status updated successfully");
+      Response::success("Visitor status updated successfully", $updateData);
       
     } catch(Exception $e) {
       error_log("Update visitor status error: " . $e->getMessage());

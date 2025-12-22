@@ -265,7 +265,7 @@ class AuthController extends BaseController
       $stmt = $this->db->prepare("UPDATE users SET password = ? WHERE id = ?");
       $stmt->execute([$hashedPassword, $payload['uid']]);
 
-      Response::success("Password changed successfully");
+      Response::success("Password changed successfully", );
 
     } catch (Exception $e) {
       error_log("Password change error: " . $e->getMessage());
@@ -356,7 +356,9 @@ class AuthController extends BaseController
         Response::error("Failed to update user status", 500);
       }
 
-      Response::success("User status updated successfully");
+      Response::success("User status updated successfully", [
+        'status' => $data['status']
+      ]);
 
     } catch (Exception $e) {
       error_log("Update user status error: " . $e->getMessage());

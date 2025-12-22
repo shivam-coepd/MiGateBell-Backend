@@ -185,7 +185,7 @@ class FamilyController extends BaseController
                 ['id' => $id]
             );
 
-            Response::success("Family member updated successfully");
+            Response::success("Family member updated successfully", ['id' => $id, 'updated_fields' => $updateData]);
 
         } catch (Exception $e) {
             Response::error("Failed to update family member: " . $e->getMessage(), 500);

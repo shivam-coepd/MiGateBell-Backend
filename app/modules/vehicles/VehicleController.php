@@ -280,7 +280,7 @@ class VehicleController extends BaseController
         Response::error("Failed to update vehicle", 500);
       }
 
-      Response::success("Vehicle updated successfully");
+      Response::success("Vehicle updated successfully", $updateData);
 
     } catch (Exception $e) {
       error_log("Update vehicle error: " . $e->getMessage());
