@@ -19,6 +19,8 @@ class AuthController extends BaseController
         $errors[] = 'Phone is required';
       if (empty($data['password']))
         $errors[] = 'Password is required';
+      if (empty($data['email']))
+        $errors[] = 'Email is required';
 
       // Only require society_id for non-super_admin roles
       if (empty($data['society_id']) && (!isset($data['role']) || $data['role'] !== 'super_admin')) {
@@ -46,6 +48,20 @@ class AuthController extends BaseController
       // Validate name length
       if (!empty($data['name']) && strlen($data['name']) > 100) {
         Response::error("Name must be less than 100 characters");
+      }
+
+      // Validate email format
+      if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+        Response::error("Invalid email format");
+      }
+
+      // Check if email already exists
+      if (!empty($data['email'])) {
+        $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$data['email']]);
+        if ($stmt->fetch()) {
+          Response::error("User with this email already exists", 409);
+        }
       }
 
       // Check if society exists when provided
@@ -82,6 +98,7 @@ class AuthController extends BaseController
       $fields = [
         'app_user_id' => $appUserId,
         'name' => $data['name'],
+        'email' => $data['email'],
         'phone' => $data['phone'],
         'password' => $hashedPassword,
         'role' => $role,
