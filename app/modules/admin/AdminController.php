@@ -381,10 +381,10 @@ class AdminController extends BaseController
 
       // 11. Recent Tickets (Last 10)
       $stmt = $this->db->prepare("
-        SELECT t.id, t.subject, t.status, t.priority, t.category, t.created_at,
+        SELECT t.id, t.ticket_number, t.title, t.status, t.priority, t.category, t.created_at,
                u.name as created_by_name
         FROM tickets t
-        LEFT JOIN users u ON t.created_by = u.id
+        LEFT JOIN users u ON t.resident_id = u.id
         WHERE t.society_id = ?
         ORDER BY t.created_at DESC
         LIMIT 10
