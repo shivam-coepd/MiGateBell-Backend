@@ -394,7 +394,7 @@ class AdminController extends BaseController
 
       // 12. Announcements (Last 5)
       $stmt = $this->db->prepare("
-        SELECT a.id, a.title, a.content, a.priority, a.created_at,
+        SELECT a.id, a.title, a.content, a.is_draft, a.created_at,
                u.name as created_by_name
         FROM announcements a
         LEFT JOIN users u ON a.created_by = u.id
