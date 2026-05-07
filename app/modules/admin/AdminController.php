@@ -333,11 +333,11 @@ class AdminController extends BaseController
 
       // 8. Amenities
       $stmt = $this->db->prepare("
-        SELECT a.id, a.name, a.type, a.description, a.location, a.capacity, 
-               a.price_per_hour, a.is_active, a.image_url,
+        SELECT a.id, a.name, a.description, a.image_url, a.capacity, 
+               a.booking_fee, a.cancellation_fee, a.is_active,
                COUNT(DISTINCT ab.id) as total_bookings,
                COUNT(DISTINCT CASE WHEN ab.status = 'confirmed' THEN ab.id END) as confirmed_bookings,
-               COUNT(DISTINCT CASE WHEN ab.status = 'pending' THEN ab.id END) as pending_bookings
+               COUNT(DISTINCT CASE WHEN ab.status = 'requested' THEN ab.id END) as pending_bookings
         FROM amenities a
         LEFT JOIN amenity_bookings ab ON a.id = ab.amenity_id
         WHERE a.society_id = ?
