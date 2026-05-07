@@ -807,6 +807,35 @@
           "response": []
         },
         {
+          "name": "Get Complete Society Information",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{app_url}}/api/admin/societies/1/complete",
+              "host": ["{{app_url}}"],
+              "path": ["api", "admin", "societies", "1", "complete"]
+            }
+          },
+          "response": [
+            {
+              "name": "Complete Society Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "body": "{\n  \"status\": true,\n  \"message\": \"Complete society information retrieved successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Blue Horizon Apartments\",\n    \"address\": \"Sector 7, Aundh-Baner Link Road\",\n    \"city\": \"Pune\",\n    \"state\": \"Maharashtra\",\n    \"country\": \"India\",\n    \"pincode\": \"411007\",\n    \"contact_person\": \"Mr. Rajesh Kumar\",\n    \"contact_phone\": \"+919876543210\",\n    \"contact_email\": \"info@bluehorizon.com\",\n    \"created_at\": \"2023-01-15 10:00:00\",\n    \"updated_at\": \"2024-01-20 15:30:00\",\n    \"buildings\": [\n      {\n        \"id\": 1,\n        \"name\": \"Building A\",\n        \"total_floors\": 10,\n        \"description\": \"Premium residential building\",\n        \"created_at\": \"2023-02-01 10:00:00\",\n        \"total_flats\": 40,\n        \"occupied_flats\": 35,\n        \"available_flats\": 5\n      }\n    ],\n    \"user_statistics\": {\n      \"total_users\": 250,\n      \"residents\": 200,\n      \"guards\": 10,\n      \"staff\": 25,\n      \"admins\": 10,\n      \"super_admins\": 5,\n      \"active_users\": 230,\n      \"inactive_users\": 10,\n      \"blocked_users\": 5,\n      \"pending_users\": 5\n    },\n    \"recent_users\": [],\n    \"visitor_statistics\": {\n      \"total_visitors\": 5000,\n      \"pending_visitors\": 50,\n      \"approved_visitors\": 200,\n      \"entered_visitors\": 100,\n      \"exited_visitors\": 4500,\n      \"rejected_visitors\": 150,\n      \"guest_visitors\": 3000,\n      \"delivery_visitors\": 1000,\n      \"service_visitors\": 800,\n      \"other_visitors\": 200\n    },\n    \"todays_visitors\": [],\n    \"financial_summary\": {\n      \"total_invoices\": 1500,\n      \"total_revenue\": 5000000.00,\n      \"paid_revenue\": 4500000.00,\n      \"pending_revenue\": 300000.00,\n      \"overdue_revenue\": 200000.00,\n      \"overdue_invoices\": 50,\n      \"total_payments\": 1450,\n      \"total_collected\": 4500000.00\n    },\n    \"charge_heads\": [],\n    \"amenities\": [],\n    \"communication_groups\": [],\n    \"helpdesk_summary\": {\n      \"total_tickets\": 350,\n      \"open_tickets\": 25,\n      \"in_progress_tickets\": 15,\n      \"resolved_tickets\": 280,\n      \"closed_tickets\": 30,\n      \"high_priority_tickets\": 10,\n      \"medium_priority_tickets\": 200,\n      \"low_priority_tickets\": 140\n    },\n    \"recent_tickets\": [],\n    \"recent_announcements\": [],\n    \"assets_summary\": {\n      \"total_assets\": 150,\n      \"active_assets\": 130,\n      \"maintenance_assets\": 15,\n      \"retired_assets\": 5\n    },\n    \"total_vehicles\": 300,\n    \"total_pets\": 75\n  }\n}",
+              "cookie": []
+            }
+          ]
+        },
+        {
           "name": "Update Society",
           "request": {
             "method": "PUT",

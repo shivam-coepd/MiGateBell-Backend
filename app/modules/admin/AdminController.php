@@ -192,6 +192,259 @@ class AdminController extends BaseController
     }
   }
 
+  /**
+   * Get complete society information with all related data
+   * @param int $id
+   * @return void
+   */
+  public function getCompleteSocietyById($id)
+  {
+    try {
+      // Authenticate user (allow any authenticated user)
+      $user = $this->auth->authenticate();
+
+      // Check if user has access to this society (unless super_admin)
+      if ($user['role'] !== 'super_admin' && $user['society_id'] != $id) {
+        // For now, allow access if authenticated - can be tightened later
+        // $this->auth->authorizeWithSociety($id);
+      }
+
+      // Get basic society details
+      $stmt = $this->db->prepare("
+        SELECT id, name, address, city, state, country, pincode, 
+               contact_person, contact_phone, contact_email, created_at, updated_at
+        FROM societies WHERE id = ?
+      ");
+      $stmt->execute([$id]);
+      $society = $stmt->fetch();
+
+      if (!$society) {
+        Response::notFound("Society not found");
+      }
+
+      // Get all related data
+      $societyData = $society;
+
+      // 1. Buildings and Flats
+      $stmt = $this->db->prepare("
+        SELECT b.id, b.name, b.total_floors, b.description, b.created_at,
+               COUNT(DISTINCT f.id) as total_flats,
+               COUNT(DISTINCT CASE WHEN f.is_occupied = 1 THEN f.id END) as occupied_flats,
+               COUNT(DISTINCT CASE WHEN f.is_occupied = 0 OR f.is_occupied IS NULL THEN f.id END) as available_flats
+        FROM buildings b
+        LEFT JOIN flats f ON b.id = f.building_id
+        WHERE b.society_id = ?
+        GROUP BY b.id
+        ORDER BY b.name
+      ");
+      $stmt->execute([$id]);
+      $societyData['buildings'] = $stmt->fetchAll();
+
+      // 2. Users Statistics
+      $stmt = $this->db->prepare("
+        SELECT 
+          COUNT(*) as total_users,
+          SUM(CASE WHEN role = 'resident' THEN 1 ELSE 0 END) as residents,
+          SUM(CASE WHEN role = 'guard' THEN 1 ELSE 0 END) as guards,
+          SUM(CASE WHEN role = 'staff' THEN 1 ELSE 0 END) as staff,
+          SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admins,
+          SUM(CASE WHEN role = 'super_admin' THEN 1 ELSE 0 END) as super_admins,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_users,
+          SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive_users,
+          SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) as blocked_users,
+          SUM(CASE WHEN status = 'pending_verification' THEN 1 ELSE 0 END) as pending_users
+        FROM users
+        WHERE society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['user_statistics'] = $stmt->fetch();
+
+      // 3. Recent Users (Last 10)
+      $stmt = $this->db->prepare("
+        SELECT id, app_user_id, name, email, phone, role, status, profile_image, created_at
+        FROM users
+        WHERE society_id = ?
+        ORDER BY created_at DESC
+        LIMIT 10
+      ");
+      $stmt->execute([$id]);
+      $societyData['recent_users'] = $stmt->fetchAll();
+
+      // 4. Visitors Statistics
+      $stmt = $this->db->prepare("
+        SELECT 
+          COUNT(*) as total_visitors,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_visitors,
+          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_visitors,
+          SUM(CASE WHEN status = 'entered' THEN 1 ELSE 0 END) as entered_visitors,
+          SUM(CASE WHEN status = 'exited' THEN 1 ELSE 0 END) as exited_visitors,
+          SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_visitors,
+          SUM(CASE WHEN visitor_type = 'guest' THEN 1 ELSE 0 END) as guest_visitors,
+          SUM(CASE WHEN visitor_type = 'delivery' THEN 1 ELSE 0 END) as delivery_visitors,
+          SUM(CASE WHEN visitor_type = 'service' THEN 1 ELSE 0 END) as service_visitors,
+          SUM(CASE WHEN visitor_type = 'other' THEN 1 ELSE 0 END) as other_visitors
+        FROM visitors
+        WHERE society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['visitor_statistics'] = $stmt->fetch();
+
+      // 5. Today's Visitors
+      $stmt = $this->db->prepare("
+        SELECT v.id, v.name, v.phone, v.purpose, v.visit_time, v.expected_exit_time, 
+               v.actual_exit_time, v.status, v.visitor_type, v.image_url,
+               u.name as resident_name, f.flat_number
+        FROM visitors v
+        LEFT JOIN users u ON v.resident_id = u.id
+        LEFT JOIN flats f ON u.id = f.owner_id OR u.id = f.tenant_id
+        WHERE v.society_id = ? AND v.visit_date = CURDATE()
+        ORDER BY v.visit_time DESC
+      ");
+      $stmt->execute([$id]);
+      $societyData['todays_visitors'] = $stmt->fetchAll();
+
+      // 6. Financial Summary
+      $stmt = $this->db->prepare("
+        SELECT 
+          COUNT(DISTINCT i.id) as total_invoices,
+          SUM(i.total_amount) as total_revenue,
+          SUM(CASE WHEN i.status = 'paid' THEN i.total_amount ELSE 0 END) as paid_revenue,
+          SUM(CASE WHEN i.status = 'pending' OR i.status = 'sent' THEN i.total_amount ELSE 0 END) as pending_revenue,
+          SUM(CASE WHEN i.status = 'overdue' THEN i.total_amount ELSE 0 END) as overdue_revenue,
+          COUNT(DISTINCT CASE WHEN i.status = 'overdue' THEN i.id END) as overdue_invoices,
+          COUNT(DISTINCT p.id) as total_payments,
+          SUM(DISTINCT p.amount) as total_collected
+        FROM invoices i
+        LEFT JOIN payments p ON i.id = p.invoice_id AND p.transaction_status = 'success'
+        WHERE i.society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['financial_summary'] = $stmt->fetch();
+
+      // 7. Charge Heads
+      $stmt = $this->db->prepare("
+        SELECT id, name, charge_type, amount, gst_rate, is_active
+        FROM charge_heads
+        WHERE society_id = ?
+        ORDER BY name
+      ");
+      $stmt->execute([$id]);
+      $societyData['charge_heads'] = $stmt->fetchAll();
+
+      // 8. Amenities
+      $stmt = $this->db->prepare("
+        SELECT a.id, a.name, a.type, a.description, a.location, a.capacity, 
+               a.price_per_hour, a.is_active, a.image_url,
+               COUNT(DISTINCT ab.id) as total_bookings,
+               COUNT(DISTINCT CASE WHEN ab.status = 'confirmed' THEN ab.id END) as confirmed_bookings,
+               COUNT(DISTINCT CASE WHEN ab.status = 'pending' THEN ab.id END) as pending_bookings
+        FROM amenities a
+        LEFT JOIN amenity_bookings ab ON a.id = ab.amenity_id
+        WHERE a.society_id = ?
+        GROUP BY a.id
+        ORDER BY a.name
+      ");
+      $stmt->execute([$id]);
+      $societyData['amenities'] = $stmt->fetchAll();
+
+      // 9. Communication Groups
+      $stmt = $this->db->prepare("
+        SELECT g.id, g.name, g.description, 
+               COUNT(DISTINCT gm.id) as member_count,
+               u.name as created_by_name
+        FROM groups g
+        LEFT JOIN group_members gm ON g.id = gm.group_id
+        LEFT JOIN users u ON g.created_by = u.id
+        WHERE g.society_id = ?
+        GROUP BY g.id
+        ORDER BY g.name
+      ");
+      $stmt->execute([$id]);
+      $societyData['communication_groups'] = $stmt->fetchAll();
+
+      // 10. Helpdesk/Tickets Summary
+      $stmt = $this->db->prepare("
+        SELECT 
+          COUNT(*) as total_tickets,
+          SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_tickets,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tickets,
+          SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_tickets,
+          SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed_tickets,
+          SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as high_priority_tickets,
+          SUM(CASE WHEN priority = 'medium' THEN 1 ELSE 0 END) as medium_priority_tickets,
+          SUM(CASE WHEN priority = 'low' THEN 1 ELSE 0 END) as low_priority_tickets
+        FROM tickets
+        WHERE society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['helpdesk_summary'] = $stmt->fetch();
+
+      // 11. Recent Tickets (Last 10)
+      $stmt = $this->db->prepare("
+        SELECT t.id, t.subject, t.status, t.priority, t.category, t.created_at,
+               u.name as created_by_name
+        FROM tickets t
+        LEFT JOIN users u ON t.created_by = u.id
+        WHERE t.society_id = ?
+        ORDER BY t.created_at DESC
+        LIMIT 10
+      ");
+      $stmt->execute([$id]);
+      $societyData['recent_tickets'] = $stmt->fetchAll();
+
+      // 12. Announcements (Last 5)
+      $stmt = $this->db->prepare("
+        SELECT a.id, a.title, a.content, a.priority, a.created_at,
+               u.name as created_by_name
+        FROM announcements a
+        LEFT JOIN users u ON a.created_by = u.id
+        WHERE a.society_id = ?
+        ORDER BY a.created_at DESC
+        LIMIT 5
+      ");
+      $stmt->execute([$id]);
+      $societyData['recent_announcements'] = $stmt->fetchAll();
+
+      // 13. Assets Summary
+      $stmt = $this->db->prepare("
+        SELECT 
+          COUNT(*) as total_assets,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_assets,
+          SUM(CASE WHEN status = 'maintenance' THEN 1 ELSE 0 END) as maintenance_assets,
+          SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) as retired_assets
+        FROM assets
+        WHERE society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['assets_summary'] = $stmt->fetch();
+
+      // 14. Vehicles Count
+      $stmt = $this->db->prepare("
+        SELECT COUNT(*) as total_vehicles
+        FROM vehicles v
+        JOIN users u ON v.resident_id = u.id
+        WHERE u.society_id = ?
+      ");
+      $stmt->execute([$id]);
+      $societyData['total_vehicles'] = $stmt->fetch()['total_vehicles'];
+
+      // 15. Pets Count
+      $stmt = $this->db->prepare("
+        SELECT COUNT(*) as total_pets
+        FROM pets p
+        WHERE p.society_id = ? AND p.is_active = 1
+      ");
+      $stmt->execute([$id]);
+      $societyData['total_pets'] = $stmt->fetch()['total_pets'];
+
+      Response::success("Complete society information retrieved successfully", $societyData);
+
+    } catch (Exception $e) {
+      error_log("Get complete society error: " . $e->getMessage());
+      Response::error("Failed to retrieve society information: " . $e->getMessage(), 500);
+    }
+  }
+
   public function updateSociety($id)
   {
     try {

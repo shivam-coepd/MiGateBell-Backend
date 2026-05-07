@@ -217,6 +217,11 @@ try {
         (new AdminController)->getSocietyById($matches[1]);
     }
 
+    // Get complete society information with all related data
+    if (preg_match('/^\/api\/admin\/societies\/(\d+)\/complete$/', $uri, $matches) && $method === 'GET') {
+        (new AdminController)->getCompleteSocietyById($matches[1]);
+    }
+
     if (preg_match('/^\/api\/admin\/societies\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
         (new AdminController)->updateSociety($matches[1]);
     }
