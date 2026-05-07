@@ -17,6 +17,15 @@ class AdminController extends BaseController
         Response::validationError($errors);
       }
 
+      // Validate plan if provided
+      if (isset($data['plan'])) {
+        $allowedPlans = ['starter', 'professional', 'enterprise'];
+        if (!in_array($data['plan'], $allowedPlans)) {
+          Response::error("Invalid plan. Allowed values: " . implode(', ', $allowedPlans));
+        }
+      }
+      $plan = $data['plan'] ?? 'starter'; // Default to starter
+
       // Check if society with same name already exists
       $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
       $stmt->execute([$data['name']]);
@@ -94,7 +103,8 @@ class AdminController extends BaseController
         'pincode' => $data['pincode'] ?? '',
         'contact_person' => $data['contact_person'] ?? '',
         'contact_phone' => $normalizedPhone,  // Stored in E.164 format
-        'contact_email' => $data['contact_email'] ?? ''
+        'contact_email' => $data['contact_email'] ?? '',
+        'plan' => $plan
       ]);
 
       Response::success("Society created successfully", ['society_id' => $societyId], 201);
@@ -139,7 +149,7 @@ class AdminController extends BaseController
       // Get societies
       $query = "
         SELECT id, name, address, city, state, country, pincode, 
-               contact_person, contact_phone, contact_email, created_at
+               contact_person, contact_phone, contact_email, plan, created_at
         FROM societies
         " . $whereClause . "
         ORDER BY created_at DESC
@@ -174,7 +184,7 @@ class AdminController extends BaseController
 
       $stmt = $this->db->prepare("
         SELECT id, name, address, city, state, country, pincode, 
-               contact_person, contact_phone, contact_email, created_at
+               contact_person, contact_phone, contact_email, plan, created_at
         FROM societies WHERE id = ?
       ");
       $stmt->execute([$id]);
@@ -212,7 +222,7 @@ class AdminController extends BaseController
       // Get basic society details
       $stmt = $this->db->prepare("
         SELECT id, name, address, city, state, country, pincode, 
-               contact_person, contact_phone, contact_email, created_at, updated_at
+               contact_person, contact_phone, contact_email, plan, created_at, updated_at
         FROM societies WHERE id = ?
       ");
       $stmt->execute([$id]);
@@ -468,7 +478,8 @@ class AdminController extends BaseController
         'pincode',
         'contact_person',
         'contact_phone',
-        'contact_email'
+        'contact_email',
+        'plan'
       ];
 
       foreach ($allowedFields as $field) {
@@ -554,7 +565,7 @@ class AdminController extends BaseController
 
       // Search societies by name with partial match
       $stmt = $this->db->prepare("
-        SELECT id, name, address, city, state, country
+        SELECT id, name, address, city, state, country, plan
         FROM societies 
         WHERE name LIKE ? OR address LIKE ? OR city LIKE ?
         ORDER BY name
