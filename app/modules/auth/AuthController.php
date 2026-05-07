@@ -131,9 +131,11 @@ class AuthController extends BaseController
 
       $token = jwt_encode($tokenData);
 
+      // Fetch complete user profile for response
+      $userProfile = $this->getCompleteUserProfile($userId);
+
       Response::success("Registration successful", [
-        'user_id' => $userId,
-        'app_user_id' => $appUserId,
+        'user' => $userProfile,
         'token' => $token
       ], 201);
 
@@ -180,15 +182,11 @@ class AuthController extends BaseController
 
       $token = jwt_encode($tokenData);
 
+      // Fetch complete user profile for response
+      $userProfile = $this->getCompleteUserProfile($user['id']);
+
       Response::success("Login successful", [
-        'user' => [
-          'id' => $user['id'],
-          'app_user_id' => $user['app_user_id'],
-          'name' => $user['name'],
-          'phone' => $user['phone'],
-          'role' => $user['role'],
-          'society_id' => $user['society_id']
-        ],
+        'user' => $userProfile,
         'token' => $token
       ]);
 
@@ -381,5 +379,150 @@ class AuthController extends BaseController
       error_log("Update user status error: " . $e->getMessage());
       Response::error("Failed to update user status: " . $e->getMessage(), 500);
     }
+  }
+
+  /**
+   * Get complete user profile details
+   * @param int $userId
+   * @return array
+   */
+  private function getCompleteUserProfile($userId)
+  {
+    // Fetch basic user details
+    $stmt = $this->db->prepare("
+      SELECT id, app_user_id, name, email, phone, role, society_id, profile_image, 
+             cover_image_url, resident_type, bio, profession, hometown, status, created_at, updated_at
+      FROM users 
+      WHERE id = ?
+    ");
+    $stmt->execute([$userId]);
+    $profile = $stmt->fetch();
+
+    if (!$profile) {
+      return [];
+    }
+
+    // Fetch society details if applicable
+    if ($profile['society_id']) {
+      $stmt = $this->db->prepare("SELECT id, name, address, city, state, pincode FROM societies WHERE id = ?");
+      $stmt->execute([$profile['society_id']]);
+      $profile['society'] = $stmt->fetch();
+    }
+
+    // Fetch role-specific data based on user role
+    $role = $profile['role'];
+    
+    switch ($role) {
+      case 'resident':
+        $profile['resident_data'] = $this->getResidentData($userId);
+        break;
+      case 'guard':
+        $profile['guard_data'] = $this->getGuardData($userId);
+        break;
+      case 'staff':
+        $profile['staff_data'] = $this->getStaffData($userId);
+        break;
+    }
+
+    return $profile;
+  }
+
+  /**
+   * Get resident-specific data
+   * @param int $userId
+   * @return array
+   */
+  private function getResidentData($userId)
+  {
+    $data = [];
+
+    // Family Members
+    $stmt = $this->db->prepare("
+      SELECT fm.id, fm.name, fm.relation, fm.phone, fm.image_url, fm.is_active, 
+             u.name AS resident_name, u.email AS resident_email
+      FROM family_members fm
+      LEFT JOIN users u ON fm.resident_id = u.id
+      WHERE fm.resident_id = ?
+    ");
+    $stmt->execute([$userId]);
+    $data['family_members'] = $stmt->fetchAll();
+
+    // Flats
+    $stmt = $this->db->prepare("
+      SELECT f.id, f.flat_number, f.floor_number, f.area_sqft, f.is_occupied, 
+             b.name as building_name
+      FROM flats f
+      LEFT JOIN buildings b ON f.building_id = b.id
+      WHERE f.owner_id = ? OR f.tenant_id = ?
+    ");
+    $stmt->execute([$userId, $userId]);
+    $data['flats'] = $stmt->fetchAll();
+
+    // Vehicles
+    $stmt = $this->db->prepare("
+      SELECT v.*, vt.name as type_name
+      FROM vehicles v
+      LEFT JOIN vehicle_types vt ON v.vehicle_type_id = vt.id
+      WHERE v.resident_id = ?
+    ");
+    $stmt->execute([$userId]);
+    $data['vehicles'] = $stmt->fetchAll();
+
+    // Pets
+    $stmt = $this->db->prepare("
+      SELECT p.id, p.resident_id, p.name, p.breed, p.age, p.weight, p.vaccination_status, 
+             p.image_url, p.notes, p.society_id, p.is_active, p.created_at,
+             pt.id AS pet_type_id, pt.name AS pet_type_name, pt.description AS pet_type_description
+      FROM pets p
+      LEFT JOIN pet_types pt ON p.pet_type_id = pt.id
+      WHERE p.resident_id = ? AND p.is_active = 1
+      ORDER BY p.created_at DESC
+    ");
+    $stmt->execute([$userId]);
+    $data['pets'] = $stmt->fetchAll();
+
+    return $data;
+  }
+
+  /**
+   * Get guard-specific data
+   * @param int $userId
+   * @return array
+   */
+  private function getGuardData($userId)
+  {
+    $data = [];
+    
+    // Today's visitor statistics
+    $stmt = $this->db->prepare("
+      SELECT count(*) as today_visitors 
+      FROM visitors 
+      WHERE guard_id = ? AND DATE(created_at) = CURRENT_DATE
+    ");
+    $stmt->execute([$userId]);
+    $data['today_stats'] = $stmt->fetch();
+
+    return $data;
+  }
+
+  /**
+   * Get staff-specific data
+   * @param int $userId
+   * @return array
+   */
+  private function getStaffData($userId)
+  {
+    $data = [];
+
+    // Assigned tickets/tasks
+    $stmt = $this->db->prepare("
+      SELECT count(*) as open_tickets
+      FROM tickets
+      WHERE assigned_to = ? AND status IN ('open', 'in_progress')
+    ");
+    $stmt->execute([$userId]);
+    $data['tasks'] = $stmt->fetch();
+
+    return $data;
   }
 }

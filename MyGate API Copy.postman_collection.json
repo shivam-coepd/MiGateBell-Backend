@@ -31,7 +31,35 @@
               "path": ["api", "auth", "register"]
             }
           },
-          "response": []
+          "response": [
+            {
+              "status": true,
+              "message": "Registration successful",
+              "data": {
+                "user_id": "8",
+                "app_user_id": "SPA-173678",
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOiI4Iiwicm9sZSI6InJlc2lkZW50IiwiZXhwIjoxNzc4MjIzNTUyLCJzb2NpZXR5X2lkIjoxLCJpYXQiOjE3NzgxMzcxNTJ9.10IUTWtcDeT4mvhcsLMKVSIg5g_so2d3uF8OmXN_B6E"
+              }
+            },
+            {
+              "status": true,
+              "message": "Registration successful",
+              "data": {
+                "user_id": "9",
+                "app_user_id": "OHX-686272",
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOiI5Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzc4MjI0MzQ5LCJzb2NpZXR5X2lkIjoyLCJpYXQiOjE3NzgxMzc5NDl9.AQ8qo4vPP3yrm4xJ5cvsHememVfddsM94PVHDMd1K2s"
+              }
+            },
+            {
+              "status": true,
+              "message": "Registration successful",
+              "data": {
+                "user_id": "10",
+                "app_user_id": "GLX-743844",
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOiIxMCIsInJvbGUiOiJzdXBlcl9hZG1pbiIsImV4cCI6MTc3ODIyNTA4OSwiaWF0IjoxNzc4MTM4Njg5fQ.uJv5y7d-yW-KmmkL5S_FmRjReS7ib3BsLVVcnSUsI8o"
+              }
+            }
+          ]
         },
         {
           "name": "Login",
@@ -53,7 +81,53 @@
               "path": ["api", "auth", "login"]
             }
           },
-          "response": []
+          "response": [
+            {
+              "status": true,
+              "message": "Login successful",
+              "data": {
+                "user": {
+                  "id": 4,
+                  "app_user_id": "USR-00004",
+                  "name": "Shivam Khule",
+                  "phone": "8010155144",
+                  "role": "resident",
+                  "society_id": 1
+                },
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOjQsInJvbGUiOiJyZXNpZGVudCIsImV4cCI6MTc3ODIyMTg2Nywic29jaWV0eV9pZCI6MSwiaWF0IjoxNzc4MTM1NDY3fQ.WzyCb66oYwlBT0t3gfaskm-lYVn7T33yzXPbVtIpDE0"
+              }
+            },
+            {
+              "status": true,
+              "message": "Login successful",
+              "data": {
+                "user": {
+                  "id": 2,
+                  "app_user_id": "USR-00002",
+                  "name": "Society Admin",
+                  "phone": "6677889900",
+                  "role": "admin",
+                  "society_id": 1
+                },
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOjIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc3ODIyMjg3OCwic29jaWV0eV9pZCI6MSwiaWF0IjoxNzc4MTM2NDc4fQ.jbvYS89J5v9Stw0LEATLaB2E_iXyr3_Fs9EzVzHDIQA"
+              }
+            },
+            {
+              "status": true,
+              "message": "Login successful",
+              "data": {
+                "user": {
+                  "id": 1,
+                  "app_user_id": "USR-00001",
+                  "name": "Super Admin",
+                  "phone": "1122334455",
+                  "role": "super_admin",
+                  "society_id": null
+                },
+                "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1aWQiOjEsInJvbGUiOiJzdXBlcl9hZG1pbiIsImV4cCI6MTc3ODIyMjkwMiwiaWF0IjoxNzc4MTM2NTAyfQ.yvaH_boowsFlXkPFtBKGp8hMG97ejrUa2Vq6a-xW7ws"
+              }
+            }
+          ]
         },
         {
           "name": "Refresh Token",
