@@ -35,16 +35,11 @@ require_once __DIR__ . '/../modules/locations/LocationController.php';
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-// DEBUG: Log the original request for troubleshooting
-// error_log("Original URI: " . $uri . " | Method: " . $method);
-
-// Dynamically determine base path for both localhost and production environments
+// Dynamically determine base path
 $basePath = '';
-// Check if we're in a subdirectory by examining the script name
 $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
 if (strpos($scriptName, '/', 1) !== false) {
     $basePath = dirname($scriptName);
-    // Remove leading slash if present and not at root
     if ($basePath !== '/' && $basePath !== '\\') {
         $basePath = rtrim($basePath, '/');
     } else {
@@ -52,120 +47,44 @@ if (strpos($scriptName, '/', 1) !== false) {
     }
 }
 
-// DEBUG: Log base path calculation
-// error_log("Calculated base path: '" . $basePath . "'");
-
-// Remove the base path to match routes correctly
+// Remove base path
 if ($basePath && strpos($uri, $basePath) === 0) {
     $uri = substr($uri, strlen($basePath));
 }
 
-// DEBUG: Log URI after base path removal
-// error_log("URI after base path removal: '" . $uri . "'");
-
-// Also handle the case where index.php is in the path
+// Handle index.php
 if (strpos($uri, '/index.php') === 0) {
-    $uri = substr($uri, 10); // Remove '/index.php'
+    $uri = substr($uri, 10);
 }
 
-// DEBUG: Log URI after index.php removal
-// error_log("URI after index.php removal: '" . $uri . "'");
-
-// Handle API prefix - ensure all routes start with /api/
-if (strpos($uri, '/api/') !== 0) {
-    // If it doesn't start with /api/, check if it should
-    if (preg_match('/^\/(buildings|auth|visitors|admin|accounting|communications|amenities|helpdesk|security|vehicles|test)/', $uri, $matches)) {
-        $uri = '/api' . $uri;
-    }
+// Ensure /api prefix
+if (strpos($uri, '/api/') !== 0 && $uri !== '/api') {
+    $uri = '/api' . $uri;
 }
 
-// DEBUG: Log final processed URI
-// error_log("Final processed URI: '" . $uri . "' | Method: " . $method);
-
-// Initialize location controller
 $locationController = new LocationController();
 
-// Route matching
 try {
-    // Test endpoint
-    if ($uri === '/api/test' && $method === 'GET') {
-        Response::success("MyGate API is running successfully!", [
-            'version' => '1.0',
-            'timestamp' => date('Y-m-d H:i:s'),
-            'server' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown'
-        ]);
-    }
-
-    // Health check endpoint
+    // Health check
     if ($uri === '/api/health' && $method === 'GET') {
-        try {
-            // Test database connection
-            $dbConfig = require __DIR__ . '/../config/database.php';
-            $db = Database::connect($dbConfig);
-
-            // Simple query to test connection
-            $stmt = $db->query("SELECT 1 as connected");
-            $result = $stmt->fetch();
-
-            Response::success("API is healthy", [
-                'database' => $result ? 'connected' : 'disconnected',
-                'php_version' => phpversion(),
-                'server_time' => date('Y-m-d H:i:s')
-            ]);
-        } catch (Exception $e) {
-            Response::error("Database connection failed: " . $e->getMessage(), 500);
-        }
+        Response::success("API is healthy");
     }
 
     // Auth routes
     if ($uri === '/api/auth/register' && $method === 'POST') {
         (new AuthController)->register();
     }
-
     if ($uri === '/api/auth/login' && $method === 'POST') {
         (new AuthController)->login();
     }
-
     if ($uri === '/api/auth/refresh' && $method === 'POST') {
         (new AuthController)->refreshToken();
     }
-
-    if ($uri === '/api/auth/change-password' && $method === 'POST') {
-        (new AuthController)->changePassword();
-    }
-
-    if ($uri === '/api/auth/forgot-password' && $method === 'POST') {
-        (new AuthController)->forgotPassword();
-    }
-
     if ($uri === '/api/auth/logout' && $method === 'POST') {
         (new AuthController)->logout();
     }
-
-    // User status update route
     if (preg_match('/^\/api\/auth\/users\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
         (new AuthController)->updateUserStatus($matches[1]);
-    }
-
-    // Visitor routes
-    if ($uri === '/api/visitors' && $method === 'POST') {
-        (new VisitorsController)->addVisitor();
-    }
-
-    if ($uri === '/api/visitors' && $method === 'GET') {
-        (new VisitorsController)->getVisitors();
-    }
-
-    if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'GET') {
-        (new VisitorsController)->getVisitorById($matches[1]);
-    }
-
-    if (preg_match('/^\/api\/visitors\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
-        (new VisitorsController)->updateVisitorStatus($matches[1]);
-    }
-
-    if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
-        (new VisitorsController)->deleteVisitor($matches[1]);
     }
 
     // Admin routes
