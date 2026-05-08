@@ -93,30 +93,91 @@ class SuperAdminController extends BaseController
     public function getRegistrations()
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-            
-            try {
-                $status = isset($_GET['status']) ? $_GET['status'] : null;
-                $query = "SELECT id, society_name as societyName, address, city, state, pincode, towers, total_flats as totalFlats, contact_name as contactName, contact_email as contactEmail, contact_phone as contactPhone, gst, pan, message, status, created_at as createdAt FROM society_registrations";
-                $params = [];
-                
-                if ($status) {
-                    $query .= " WHERE status = ?";
-                    $params[] = $status;
-                }
-                $query .= " ORDER BY created_at DESC";
-                
-                $stmt = $this->db->prepare($query);
-                $stmt->execute($params);
-                $regs = $stmt->fetchAll();
-                
-                Response::success("Registrations retrieved", $regs);
-            } catch (Exception $e) {
-                // Table might not exist yet
-                Response::success("Registrations retrieved", []);
-            }
+            $this->auth->authorize('super_admin');
+            $query = "SELECT id, society_name as societyName, address, city, state, pincode, towers, total_flats as totalFlats, contact_name as contactName, contact_email as contactEmail, contact_phone as contactPhone, gst, pan, message, status, created_at as createdAt FROM society_registrations ORDER BY created_at DESC";
+            $stmt = $this->db->query($query);
+            $regs = $stmt->fetchAll();
+            Response::success("Registrations retrieved", $regs);
         } catch (Exception $e) {
             Response::error("Failed to retrieve registrations: " . $e->getMessage(), 500);
+        }
+    }
+
+    public function approveRegistrationLead($id)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+
+            // 1. Fetch Lead
+            $stmt = $this->db->prepare("SELECT * FROM society_registrations WHERE id = ?");
+            $stmt->execute([$id]);
+            $lead = $stmt->fetch();
+
+            if (!$lead) {
+                Response::notFound("Registration lead not found");
+            }
+
+            if ($lead['status'] === 'approved') {
+                Response::error("This lead has already been approved", 400);
+            }
+
+            // 2. Create Society
+            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
+            
+            $societyId = $this->insert('societies', [
+                'name' => $lead['society_name'],
+                'code' => $code,
+                'address' => $lead['address'] ?? '',
+                'city' => $lead['city'],
+                'state' => $lead['state'] ?? '',
+                'country' => 'India',
+                'pincode' => $lead['pincode'] ?? '',
+                'contact_person' => $lead['contact_name'],
+                'contact_phone' => $lead['contact_phone'],
+                'contact_email' => $lead['contact_email'],
+                'plan' => 'starter',
+                'towers' => $lead['towers'] ?? 1,
+                'total_flats' => $lead['total_flats'] ?? 0,
+                'status' => 'approved'
+            ]);
+
+            // 3. Create Admin User
+            $password = 'Admin@' . rand(1000, 9999);
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $appUserId = AppUserIdHelper::generateUnique($this->db);
+
+            $adminId = $this->insert('users', [
+                'app_user_id' => $appUserId,
+                'name' => $lead['contact_name'],
+                'email' => $lead['contact_email'],
+                'phone' => $lead['contact_phone'],
+                'password' => $hashedPassword,
+                'role' => 'admin',
+                'society_id' => $societyId,
+                'status' => 'active'
+            ]);
+
+            // 4. Link Admin to Society
+            $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
+
+            // 5. Update Lead Status
+            $this->update('society_registrations', [
+                'status' => 'approved',
+                'reviewed_at' => date('Y-m-d H:i:s')
+            ], 'id = :id', ['id' => $id]);
+
+            Response::success("Lead approved and society activated", [
+                'society_id' => $societyId,
+                'society_name' => $lead['society_name'],
+                'code' => $code,
+                'admin_email' => $lead['contact_email'],
+                'admin_phone' => $lead['contact_phone'],
+                'password' => $password
+            ]);
+
+        } catch (Exception $e) {
+            error_log("Approve lead error: " . $e->getMessage());
+            Response::error("Failed to approve lead: " . $e->getMessage(), 500);
         }
     }
 

@@ -481,6 +481,9 @@ try {
     }
 
     // Registrations
+    if (preg_match('/^\/api\/superadmin\/registrations\/([0-9]+)\/approve$/', $uri, $matches) && $method === 'POST') {
+        (new SuperAdminController())->approveRegistrationLead($matches[1]);
+    }
     if ($uri === '/api/superadmin/registrations' && $method === 'GET') {
         (new SuperAdminController())->getRegistrations();
     }
