@@ -475,26 +475,47 @@ try {
         (new FlatController)->getFlatsByBuilding($matches[1]);
     }
 
-    // Super Admin Routes
+    // Super Admin Stats
     if ($uri === '/api/superadmin/stats' && $method === 'GET') {
-        $controller = new SuperAdminController();
-        $controller->getStats();
+        (new SuperAdminController())->getStats();
     }
+
+    // Registrations
     if ($uri === '/api/superadmin/registrations' && $method === 'GET') {
-        $controller = new SuperAdminController();
-        $controller->getRegistrations();
+        (new SuperAdminController())->getRegistrations();
     }
-    if ($uri === '/api/superadmin/registrations/status' && $method === 'POST') {
-        $controller = new SuperAdminController();
-        $controller->updateRegistrationStatus();
+    if (preg_match('/^\/api\/superadmin\/registrations\/([0-9]+)$/', $uri, $matches) && $method === 'PUT') {
+        (new SuperAdminController())->updateRegistration($matches[1]);
     }
+
+    // Societies
     if ($uri === '/api/superadmin/societies' && $method === 'GET') {
-        $controller = new SuperAdminController();
-        $controller->getSocieties();
+        (new SuperAdminController())->getSocieties();
     }
-    if ($uri === '/api/superadmin/societies/status' && $method === 'POST') {
+    if ($uri === '/api/superadmin/societies' && $method === 'POST') {
+        (new SuperAdminController())->createSociety();
+    }
+    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)$/', $uri, $matches)) {
         $controller = new SuperAdminController();
-        $controller->updateSocietyStatus();
+        if ($method === 'GET') $controller->getSocietyById($matches[1]);
+        if ($method === 'DELETE') $controller->deleteSociety($matches[1]);
+    }
+    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/admin$/', $uri, $matches) && $method === 'POST') {
+        (new SuperAdminController())->createSocietyAdmin($matches[1]);
+    }
+    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/approve$/', $uri, $matches) && $method === 'PUT') {
+        (new SuperAdminController())->approveSociety($matches[1]);
+    }
+    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/suspend$/', $uri, $matches) && $method === 'PUT') {
+        (new SuperAdminController())->suspendSociety($matches[1]);
+    }
+
+    // Admins
+    if ($uri === '/api/superadmin/admins' && $method === 'GET') {
+        (new SuperAdminController())->getAdmins();
+    }
+    if (preg_match('/^\/api\/superadmin\/admins\/([0-9]+)\/toggle$/', $uri, $matches) && $method === 'PUT') {
+        (new SuperAdminController())->toggleAdmin($matches[1]);
     }
 
     // If no route matched, return 404

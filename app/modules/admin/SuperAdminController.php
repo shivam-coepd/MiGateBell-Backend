@@ -17,13 +17,13 @@ class SuperAdminController extends BaseController
             // Status counts (assuming status column was added)
             // If the column doesn't exist, these will default to 0
             try {
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status = 'approved'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'approved'");
                 $stats['approved'] = $stmt->fetch()['count'];
                 
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status = 'pending'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'pending'");
                 $stats['pending'] = $stmt->fetch()['count'];
 
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status = 'verified'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'verified'");
                 $stats['verified'] = $stmt->fetch()['count'];
             } catch (Exception $e) {
                 $stats['approved'] = 0;
@@ -33,10 +33,10 @@ class SuperAdminController extends BaseController
 
             // Registrations
             try {
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'new'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status COLLATE utf8mb4_unicode_ci = 'new'");
                 $stats['newLeads'] = $stmt->fetch()['count'];
 
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'under_review'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status COLLATE utf8mb4_unicode_ci = 'under_review'");
                 $stats['underReview'] = $stmt->fetch()['count'];
             } catch (Exception $e) {
                 $stats['newLeads'] = 0;
@@ -57,7 +57,7 @@ class SuperAdminController extends BaseController
                 $month = $d->format('Y-m');
                 $display = $d->format('M y');
                 
-                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE DATE_FORMAT(created_at, '%Y-%m') = ?");
+                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE DATE_FORMAT(created_at, '%Y-%m') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci");
                 $stmt->execute([$month]);
                 
                 $stats['trend'][] = [
@@ -212,6 +212,18 @@ class SuperAdminController extends BaseController
                 'total_flats' => $data['totalFlats'] ?? 0,
                 'status' => 'verified' // Super admins create verified societies
             ]);
+
+            // Update registration status if provided
+            if (!empty($data['registrationId'])) {
+                try {
+                    $this->update('society_registrations', [
+                        'status' => 'approved',
+                        'reviewed_at' => date('Y-m-d H:i:s')
+                    ], 'id = :id', ['id' => $data['registrationId']]);
+                } catch (Exception $e) {
+                    error_log("Failed to update registration status: " . $e->getMessage());
+                }
+            }
 
             $newSoc = [
                 'id' => $societyId,
