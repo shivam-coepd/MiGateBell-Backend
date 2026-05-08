@@ -30,6 +30,7 @@ require_once __DIR__ . '/../modules/family/FamilyController.php';
 require_once __DIR__ . '/../modules/admin/UserManagementController.php';
 require_once __DIR__ . '/../modules/flats/FlatController.php';
 require_once __DIR__ . '/../modules/locations/LocationController.php';
+require_once __DIR__ . '/../modules/admin/SuperAdminController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -472,6 +473,28 @@ try {
     }
     if (preg_match('/^\/api\/flats\/by-building\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
         (new FlatController)->getFlatsByBuilding($matches[1]);
+    }
+
+    // Super Admin Routes
+    if ($uri === '/api/superadmin/stats' && $method === 'GET') {
+        $controller = new SuperAdminController();
+        $controller->getStats();
+    }
+    if ($uri === '/api/superadmin/registrations' && $method === 'GET') {
+        $controller = new SuperAdminController();
+        $controller->getRegistrations();
+    }
+    if ($uri === '/api/superadmin/registrations/status' && $method === 'POST') {
+        $controller = new SuperAdminController();
+        $controller->updateRegistrationStatus();
+    }
+    if ($uri === '/api/superadmin/societies' && $method === 'GET') {
+        $controller = new SuperAdminController();
+        $controller->getSocieties();
+    }
+    if ($uri === '/api/superadmin/societies/status' && $method === 'POST') {
+        $controller = new SuperAdminController();
+        $controller->updateSocietyStatus();
     }
 
     // If no route matched, return 404
