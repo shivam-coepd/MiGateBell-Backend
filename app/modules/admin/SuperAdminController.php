@@ -121,7 +121,20 @@ class SuperAdminController extends BaseController
                 Response::error("This lead has already been approved", 400);
             }
 
-            // 2. Create Society
+            // 2. Normalize Phone
+            $normalizedPhone = $lead['contact_phone'];
+            $cleanPhone = preg_replace('/[^\d+]/', '', $normalizedPhone);
+            if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
+                if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
+                    $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
+                }
+            }
+            $digitsOnly = ltrim($cleanPhone, '+');
+            if (preg_match('/^\d{8,15}$/', $digitsOnly)) {
+                $normalizedPhone = '+' . $digitsOnly;
+            }
+
+            // 3. Create Society
             $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
             
             $societyId = $this->insert('societies', [
@@ -133,7 +146,7 @@ class SuperAdminController extends BaseController
                 'country' => 'India',
                 'pincode' => $lead['pincode'] ?? '',
                 'contact_person' => $lead['contact_name'],
-                'contact_phone' => $lead['contact_phone'],
+                'contact_phone' => $normalizedPhone,
                 'contact_email' => $lead['contact_email'],
                 'plan' => 'starter',
                 'towers' => $lead['towers'] ?? 1,
@@ -141,7 +154,7 @@ class SuperAdminController extends BaseController
                 'status' => 'approved'
             ]);
 
-            // 3. Create Admin User
+            // 4. Create Admin User
             $password = 'Admin@' . rand(1000, 9999);
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             $appUserId = AppUserIdHelper::generateUnique($this->db);
@@ -150,17 +163,17 @@ class SuperAdminController extends BaseController
                 'app_user_id' => $appUserId,
                 'name' => $lead['contact_name'],
                 'email' => $lead['contact_email'],
-                'phone' => $lead['contact_phone'],
+                'phone' => $normalizedPhone,
                 'password' => $hashedPassword,
                 'role' => 'admin',
                 'society_id' => $societyId,
                 'status' => 'active'
             ]);
 
-            // 4. Link Admin to Society
+            // 5. Link Admin to Society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // 5. Update Lead Status
+            // 6. Update Lead Status
             $this->update('society_registrations', [
                 'status' => 'approved',
                 'reviewed_at' => date('Y-m-d H:i:s')
@@ -171,7 +184,7 @@ class SuperAdminController extends BaseController
                 'society_name' => $lead['society_name'],
                 'code' => $code,
                 'admin_email' => $lead['contact_email'],
-                'admin_phone' => $lead['contact_phone'],
+                'admin_phone' => $normalizedPhone,
                 'password' => $password
             ]);
 
@@ -240,66 +253,109 @@ class SuperAdminController extends BaseController
     public function createSociety()
     {
         try {
+            // Only super admins can create societies
             $user = $this->auth->authorize('super_admin');
+
             $data = json_decode(file_get_contents("php://input"), true);
 
-            $errors = $this->validateRequiredFields($data, ['name', 'city', 'contactEmail']);
+            // Validation: Required fields
+            $errors = $this->validateRequiredFields($data, ['name', 'address']);
             if (!empty($errors)) {
                 Response::validationError($errors);
             }
 
-            // Check uniqueness
+            // Validate plan if provided
+            if (isset($data['plan'])) {
+                $allowedPlans = ['starter', 'professional', 'enterprise'];
+                if (!in_array($data['plan'], $allowedPlans)) {
+                    Response::error("Invalid plan. Allowed values: " . implode(', ', $allowedPlans));
+                }
+            }
+            $plan = $data['plan'] ?? 'starter'; // Default to starter
+
+            // Check if society with same name already exists
             $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
             $stmt->execute([$data['name']]);
             if ($stmt->fetch()) {
                 Response::error("A society with this name already exists", 409);
             }
 
-            $code = strtoupper(substr($data['name'], 0, 4)) . rand(100, 999);
+            // Validate and normalize contact_phone
+            $normalizedPhone = null;
+            $phoneInput = $data['contact_phone'] ?? $data['contactPhone'] ?? null;
+            if (!empty($phoneInput)) {
+                $originalPhone = trim($phoneInput);
+                $cleanPhone = preg_replace('/[^\d+]/', '', $originalPhone);
 
-            $societyId = $this->insert('societies', [
-                'name' => $data['name'],
-                'code' => $code,
-                'address' => $data['address'] ?? '',
-                'city' => $data['city'],
-                'state' => $data['state'] ?? '',
-                'country' => $data['country'] ?? 'India',
-                'pincode' => $data['pincode'] ?? '',
-                'contact_person' => $data['contactName'] ?? '',
-                'contact_phone' => $data['contactPhone'] ?? '',
-                'contact_email' => $data['contactEmail'],
-                'plan' => $data['plan'] ?? 'starter',
-                'towers' => $data['towers'] ?? 1,
-                'total_flats' => $data['totalFlats'] ?? 0,
-                'status' => 'verified' // Super admins create verified societies
-            ]);
+                if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
+                    if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
+                        $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
+                    } else {
+                        if (substr($originalPhone, 0, 1) !== '+') {
+                            Response::error("International phone numbers must start with country code (e.g., +1, +44)");
+                        }
+                    }
+                }
 
-            // Update registration status if provided
-            if (!empty($data['registrationId'])) {
-                try {
-                    $this->update('society_registrations', [
-                        'status' => 'approved',
-                        'reviewed_at' => date('Y-m-d H:i:s')
-                    ], 'id = :id', ['id' => $data['registrationId']]);
-                } catch (Exception $e) {
-                    error_log("Failed to update registration status: " . $e->getMessage());
+                $digitsOnly = ltrim($cleanPhone, '+');
+                if (!preg_match('/^\d{8,15}$/', $digitsOnly)) {
+                    Response::error("Phone number must have 8 to 15 digits after country code");
+                }
+
+                $normalizedPhone = '+' . $digitsOnly;
+                $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_phone = ?");
+                $stmt->execute([$normalizedPhone]);
+                if ($stmt->fetch()) {
+                    Response::error("A society with this contact phone already exists", 409);
                 }
             }
 
-            $newSoc = [
-                'id' => $societyId,
-                'name' => $data['name'],
-                'code' => $code,
-                'city' => $data['city'],
-                'plan' => $data['plan'] ?? 'starter',
-                'status' => 'verified',
-                'inviteLink' => "https://mygatebell.com/join/" . $code
-            ];
+            // Email validation and uniqueness
+            $emailInput = $data['contact_email'] ?? $data['contactEmail'] ?? null;
+            if (!empty($emailInput)) {
+                if (!filter_var($emailInput, FILTER_VALIDATE_EMAIL)) {
+                    Response::error("Invalid email format");
+                }
+                $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_email = ?");
+                $stmt->execute([$emailInput]);
+                if ($stmt->fetch()) {
+                    Response::error("A society with this contact email already exists", 409);
+                }
+            }
 
-            Response::success("Society created successfully", $newSoc, 201);
+            // Pincode validation
+            if (!empty($data['pincode'])) {
+                if (strlen($data['pincode']) > 12 || !preg_match('/^[A-Za-z0-9\s-]+$/', $data['pincode'])) {
+                    Response::error("Invalid pincode/postal code format");
+                }
+            }
+
+            // Insert society — store normalized phone (mirrors AdminController::createSociety exactly)
+            $societyId = $this->insert('societies', [
+                'name'           => $data['name'],
+                'address'        => $data['address'],
+                'city'           => $data['city'] ?? '',
+                'state'          => $data['state'] ?? '',
+                'country'        => $data['country'] ?? '',
+                'pincode'        => $data['pincode'] ?? '',
+                'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
+                'contact_phone'  => $normalizedPhone,
+                'contact_email'  => $emailInput ?? '',
+                'plan'           => $plan
+            ]);
+
+            // Extension for Super Admin: Update registration status if provided
+            $regId = $data['registration_id'] ?? $data['registrationId'] ?? null;
+            if ($regId) {
+                $this->update('society_registrations', [
+                    'status'      => 'approved',
+                    'reviewed_at' => date('Y-m-d H:i:s')
+                ], 'id = :id', ['id' => $regId]);
+            }
+
+            Response::success("Society created successfully", ['society_id' => $societyId], 201);
 
         } catch (Exception $e) {
-            error_log("Create society error: " . $e->getMessage());
             Response::error("Failed to create society: " . $e->getMessage(), 500);
         }
     }
