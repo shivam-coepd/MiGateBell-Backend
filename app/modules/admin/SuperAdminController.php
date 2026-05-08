@@ -444,9 +444,19 @@ class SuperAdminController extends BaseController
                 
                 // Get society info
                 if ($admin['societyId']) {
-                    $stmt = $this->db->prepare("SELECT id, name, code, status FROM societies WHERE id = ?");
-                    $stmt->execute([$admin['societyId']]);
-                    $admin['society'] = $stmt->fetch() ?: null;
+                    try {
+                        $stmt = $this->db->prepare("SELECT id, name, code, status FROM societies WHERE id = ?");
+                        $stmt->execute([$admin['societyId']]);
+                        $admin['society'] = $stmt->fetch() ?: null;
+                    } catch (Exception $e) {
+                        $stmt = $this->db->prepare("SELECT id, name FROM societies WHERE id = ?");
+                        $stmt->execute([$admin['societyId']]);
+                        $admin['society'] = $stmt->fetch() ?: null;
+                        if ($admin['society']) {
+                            $admin['society']['code'] = 'N/A';
+                            $admin['society']['status'] = 'approved';
+                        }
+                    }
                 } else {
                     $admin['society'] = null;
                 }
