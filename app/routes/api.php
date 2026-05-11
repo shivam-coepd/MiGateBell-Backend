@@ -487,6 +487,9 @@ try {
     if ($uri === '/api/superadmin/registrations' && $method === 'GET') {
         (new SuperAdminController())->getRegistrations();
     }
+    if ($uri === '/api/superadmin/registrations' && $method === 'POST') {
+        (new SuperAdminController())->createRegistration();
+    }
     if (preg_match('/^\/api\/superadmin\/registrations\/([0-9]+)$/', $uri, $matches) && $method === 'PUT') {
         (new SuperAdminController())->updateRegistration($matches[1]);
     }

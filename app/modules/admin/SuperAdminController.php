@@ -219,10 +219,10 @@ class SuperAdminController extends BaseController
                 'gst' => $data['gst'] ?? null,
                 'pan' => $data['pan'] ?? null,
                 'message' => $data['message'] ?? null,
-                'status' => 'new'
+                'status' => 'pending'
             ]);
             
-            Response::success("Registration submitted", ['id' => $id], 201);
+            Response::success("Registration submitted successfully. Our team will review and contact you shortly.", ['id' => $id], 201);
         } catch (Exception $e) {
             Response::error("Failed to create registration: " . $e->getMessage(), 500);
         }
@@ -341,7 +341,8 @@ class SuperAdminController extends BaseController
                 'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
                 'contact_phone'  => $normalizedPhone,
                 'contact_email'  => $emailInput ?? '',
-                'plan'           => $plan
+                'plan'           => $plan,
+                'status'         => 'approved' // Super admin creates approved societies
             ]);
 
             // Extension for Super Admin: Update registration status if provided
