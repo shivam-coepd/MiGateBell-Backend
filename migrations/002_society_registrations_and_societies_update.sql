@@ -3,22 +3,29 @@
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Add missing columns to `societies` table
---    (code, towers, total_flats, admin_id were added in a prior migration;
---     gst, pan, registration_id are new here)
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE `societies`
-  ADD COLUMN IF NOT EXISTS `code`            varchar(20)  DEFAULT NULL          COMMENT 'Unique society code e.g. FERN421'  AFTER `name`,
-  ADD COLUMN IF NOT EXISTS `towers`          int(11)      DEFAULT 1             AFTER `pincode`,
-  ADD COLUMN IF NOT EXISTS `total_flats`     int(11)      DEFAULT 0             AFTER `towers`,
-  ADD COLUMN IF NOT EXISTS `admin_id`        int(11)      DEFAULT NULL          AFTER `total_flats`,
-  ADD COLUMN IF NOT EXISTS `gst`             varchar(20)  DEFAULT NULL          AFTER `admin_id`,
-  ADD COLUMN IF NOT EXISTS `pan`             varchar(20)  DEFAULT NULL          AFTER `gst`,
-  ADD COLUMN IF NOT EXISTS `registration_id` int(11)      DEFAULT NULL          COMMENT 'Source society_registrations.id — set when approved from a lead' AFTER `pan`;
+  ADD COLUMN IF NOT EXISTS `code`            varchar(20)  DEFAULT NULL  COMMENT 'Unique society code e.g. FERN421' AFTER `name`,
+  ADD COLUMN IF NOT EXISTS `towers`          int(11)      DEFAULT 1     AFTER `pincode`,
+  ADD COLUMN IF NOT EXISTS `total_flats`     int(11)      DEFAULT 0     AFTER `towers`,
+  ADD COLUMN IF NOT EXISTS `admin_id`        int(11)      DEFAULT NULL  AFTER `total_flats`,
+  ADD COLUMN IF NOT EXISTS `gst`             varchar(20)  DEFAULT NULL  AFTER `admin_id`,
+  ADD COLUMN IF NOT EXISTS `pan`             varchar(20)  DEFAULT NULL  AFTER `gst`,
+  ADD COLUMN IF NOT EXISTS `registration_id` int(11)      DEFAULT NULL  COMMENT 'FK → society_registrations.id. One society per registration.' AFTER `pan`;
+
+-- Unique constraint: prevents duplicate societies for the same registration at DB level
+-- (safe to run even if constraint already exists — IF NOT EXISTS is MySQL 8.0.19+)
+ALTER TABLE `societies`
+  ADD CONSTRAINT IF NOT EXISTS `uq_societies_registration_id` UNIQUE (`registration_id`);
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. Create `society_registrations` table (public lead capture from landing page)
---    Rows are DELETED from here once a super admin approves them;
---    all data is then stored in the `societies` table above.
+-- 2. Update society_registrations status enum to include 'approved'
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE `society_registrations`
+  MODIFY COLUMN `status` enum('pending','new','under_review','approved','rejected') DEFAULT 'new';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. Create `society_registrations` table if it doesn't exist
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `society_registrations` (
   `id`               int(11)      NOT NULL AUTO_INCREMENT,
@@ -36,7 +43,7 @@ CREATE TABLE IF NOT EXISTS `society_registrations` (
   `gst`              varchar(20)  DEFAULT NULL,
   `pan`              varchar(20)  DEFAULT NULL,
   `message`          text         DEFAULT NULL,
-  `status`           enum('pending','new','under_review','rejected') DEFAULT 'new',
+  `status`           enum('pending','new','under_review','approved','rejected') DEFAULT 'new',
   `reviewed_by`      int(11)      DEFAULT NULL,
   `reviewed_at`      timestamp    NULL DEFAULT NULL,
   `rejection_reason` text         DEFAULT NULL,

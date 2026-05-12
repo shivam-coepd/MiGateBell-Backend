@@ -47,6 +47,13 @@ $statements = [
         ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL
         COMMENT 'Source society_registrations.id — set when approved from a lead' AFTER `pan`",
 
+    // Unique constraint — one society per registration, prevents duplicate approvals at DB level
+    "ALTER TABLE `societies` ADD CONSTRAINT IF NOT EXISTS `uq_societies_registration_id` UNIQUE (`registration_id`)",
+
+    // Fix status enum to include 'approved'
+    "ALTER TABLE `society_registrations`
+        MODIFY COLUMN IF EXISTS `status` enum('pending','new','under_review','approved','rejected') DEFAULT 'new'",
+
     // ── society_registrations table: create if not exists ─────────────────
 
     "CREATE TABLE IF NOT EXISTS `society_registrations` (
@@ -92,6 +99,10 @@ $verification = [];
 foreach ($expected as $col) {
     $verification[$col] = in_array($col, $cols) ? '✅ exists' : '❌ MISSING';
 }
+
+// Verify unique constraint exists
+$constraints = $pdo->query("SHOW INDEX FROM `societies` WHERE Key_name = 'uq_societies_registration_id'")->fetchAll();
+$verification['uq_registration_id_constraint'] = count($constraints) > 0 ? '✅ exists' : '❌ MISSING (duplicate approvals possible!)';
 
 header('Content-Type: application/json');
 echo json_encode([

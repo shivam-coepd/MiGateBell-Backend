@@ -26,7 +26,11 @@ class SuperAdminController extends BaseController
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `admin_id` int(11) DEFAULT NULL AFTER `total_flats`",
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `gst` varchar(20) DEFAULT NULL AFTER `admin_id`",
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `pan` varchar(20) DEFAULT NULL AFTER `gst`",
-            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL AFTER `pan`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL COMMENT 'FK to society_registrations.id — unique, one society per registration'",
+
+    // Unique constraint — prevents duplicate societies for the same registration at DB level
+    // Ignore error if constraint already exists
+    "ALTER TABLE `societies` ADD CONSTRAINT IF NOT EXISTS `uq_societies_registration_id` UNIQUE (`registration_id`)",
         ];
         foreach ($alters as $sql) {
             try { $this->db->exec($sql); } catch (Exception $e) {}
