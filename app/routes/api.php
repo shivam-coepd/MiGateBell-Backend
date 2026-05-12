@@ -503,7 +503,8 @@ try {
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)$/', $uri, $matches)) {
         $controller = new SuperAdminController();
-        if ($method === 'GET') $controller->getSocietyById($matches[1]);
+        if ($method === 'GET')    $controller->getSocietyById($matches[1]);
+        if ($method === 'PUT')    $controller->updateSociety($matches[1]);
         if ($method === 'DELETE') $controller->deleteSociety($matches[1]);
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/admin$/', $uri, $matches) && $method === 'POST') {

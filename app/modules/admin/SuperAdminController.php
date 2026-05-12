@@ -241,6 +241,25 @@ class SuperAdminController extends BaseController
             if (!empty($updateData)) {
                 $updateData['reviewed_at'] = date('Y-m-d H:i:s');
                 $this->update('society_registrations', $updateData, 'id = :id', ['id' => $id]);
+
+                // If a society row already exists linked to this registration, sync its status too
+                if (isset($data['status'])) {
+                    $statusMap = [
+                        'under_review' => 'pending',
+                        'rejected'     => 'rejected',
+                        'pending'      => 'pending',
+                    ];
+                    $societyStatus = $statusMap[$data['status']] ?? null;
+                    if ($societyStatus) {
+                        try {
+                            $this->update('societies',
+                                ['status' => $societyStatus],
+                                'registration_id = :rid',
+                                ['rid' => $id]
+                            );
+                        } catch (Exception $e) { /* column may not exist yet */ }
+                    }
+                }
             }
             
             Response::success("Registration updated");
@@ -501,8 +520,15 @@ class SuperAdminController extends BaseController
     {
         try {
             $user = $this->auth->authorize('super_admin');
+            $this->update('societies', ['status' => 'approved'], 'id = :id', ['id' => $societyId]);
+            // Sync back to registration if this society came from a lead
             try {
-                $this->update('societies', ['status' => 'approved'], 'id = :id', ['id' => $societyId]);
+                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
+                $stmt->execute([$societyId]);
+                $row = $stmt->fetch();
+                if (!empty($row['registration_id'])) {
+                    // Registration was deleted on approval — nothing to sync back
+                }
             } catch (Exception $e) {}
             Response::success("Society approved");
         } catch (Exception $e) {
@@ -514,8 +540,18 @@ class SuperAdminController extends BaseController
     {
         try {
             $user = $this->auth->authorize('super_admin');
+            $this->update('societies', ['status' => 'suspended'], 'id = :id', ['id' => $societyId]);
+            // Sync status back to registration if still present
             try {
-                $this->update('societies', ['status' => 'suspended'], 'id = :id', ['id' => $societyId]);
+                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
+                $stmt->execute([$societyId]);
+                $row = $stmt->fetch();
+                if (!empty($row['registration_id'])) {
+                    $this->update('society_registrations',
+                        ['status' => 'rejected', 'reviewed_at' => date('Y-m-d H:i:s')],
+                        'id = :id', ['id' => $row['registration_id']]
+                    );
+                }
             } catch (Exception $e) {}
             Response::success("Society suspended");
         } catch (Exception $e) {
@@ -585,19 +621,85 @@ class SuperAdminController extends BaseController
         }
     }
 
+    public function updateSociety($id)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+            $data = json_decode(file_get_contents("php://input"), true);
+
+            // Build update payload for societies
+            $allowed = [
+                'name', 'address', 'city', 'state', 'country', 'pincode',
+                'contact_person', 'contact_phone', 'contact_email',
+                'plan', 'status', 'towers', 'total_flats', 'gst', 'pan'
+            ];
+            $updateData = [];
+            foreach ($allowed as $col) {
+                $camel = lcfirst(str_replace('_', '', ucwords($col, '_')));
+                if (isset($data[$col]))   $updateData[$col] = $data[$col];
+                elseif (isset($data[$camel])) $updateData[$col] = $data[$camel];
+            }
+
+            if (empty($updateData)) {
+                Response::error("No valid fields provided", 400);
+            }
+
+            $this->update('societies', $updateData, 'id = :id', ['id' => $id]);
+
+            // Sync matching fields back to society_registrations if linked
+            try {
+                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
+                $stmt->execute([$id]);
+                $row = $stmt->fetch();
+                if (!empty($row['registration_id'])) {
+                    $regSync = [];
+                    $fieldMap = [
+                        'name'            => 'society_name',
+                        'address'         => 'address',
+                        'city'            => 'city',
+                        'state'           => 'state',
+                        'pincode'         => 'pincode',
+                        'contact_person'  => 'contact_name',
+                        'contact_phone'   => 'contact_phone',
+                        'contact_email'   => 'contact_email',
+                        'towers'          => 'towers',
+                        'total_flats'     => 'total_flats',
+                        'gst'             => 'gst',
+                        'pan'             => 'pan',
+                    ];
+                    foreach ($fieldMap as $socCol => $regCol) {
+                        if (isset($updateData[$socCol])) {
+                            $regSync[$regCol] = $updateData[$socCol];
+                        }
+                    }
+                    if (!empty($regSync)) {
+                        $this->update('society_registrations', $regSync,
+                            'id = :id', ['id' => $row['registration_id']]);
+                    }
+                }
+            } catch (Exception $e) { /* registration may not exist */ }
+
+            Response::success("Society updated successfully");
+        } catch (Exception $e) {
+            Response::error("Failed to update society: " . $e->getMessage(), 500);
+        }
+    }
+
     public function deleteSociety($id)
     {
         try {
             $user = $this->auth->authorize('super_admin');
             
-            // Check if society exists
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE id = ?");
+            // Fetch society to get registration_id before deleting
+            $stmt = $this->db->prepare("SELECT id, registration_id FROM societies WHERE id = ?");
             $stmt->execute([$id]);
-            if (!$stmt->fetch()) {
+            $society = $stmt->fetch();
+            if (!$society) {
                 Response::notFound("Society not found");
             }
-            
+
             $this->delete('societies', 'id = ?', [$id]);
+
             Response::success("Society deleted successfully");
         } catch (Exception $e) {
             Response::error("Failed to delete society: " . $e->getMessage(), 500);
