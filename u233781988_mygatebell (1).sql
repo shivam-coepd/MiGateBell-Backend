@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: May 11, 2026 at 08:52 AM
+-- Generation Time: May 12, 2026 at 04:47 AM
 -- Server version: 11.8.6-MariaDB-log
 -- PHP Version: 7.2.34
 
@@ -916,11 +916,15 @@ CREATE TABLE `sms_logs` (
 CREATE TABLE `societies` (
   `id` int(11) NOT NULL,
   `name` varchar(150) NOT NULL,
+  `code` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,
   `city` varchar(100) DEFAULT NULL,
   `state` varchar(100) DEFAULT NULL,
   `country` varchar(100) DEFAULT NULL,
   `pincode` varchar(10) DEFAULT NULL,
+  `towers` int(11) DEFAULT 1,
+  `total_flats` int(11) DEFAULT 0,
+  `admin_id` int(11) DEFAULT NULL,
   `contact_person` varchar(100) DEFAULT NULL,
   `contact_phone` varchar(15) DEFAULT NULL,
   `contact_email` varchar(100) DEFAULT NULL,
@@ -934,41 +938,71 @@ CREATE TABLE `societies` (
 -- Dumping data for table `societies`
 --
 
-INSERT INTO `societies` (`id`, `name`, `address`, `city`, `state`, `country`, `pincode`, `contact_person`, `contact_phone`, `contact_email`, `plan`, `created_at`, `updated_at`, `status`) VALUES
-(1, 'Blue Horizon Apartments', 'Sector 7, Aundh-Baner Link Road', 'Pune', 'Maharashtra', 'India', '411007', 'Ms. Priya Nair', '9456789012', 'contact@bluehorizonpune.com', 'starter', '2025-12-16 11:55:27', '2026-05-11 07:43:45', 'approved'),
-(2, 'Riddhi-Siddhi Tiara', 'Sinhgad College Campus', 'Pune', 'Maharashtra', 'India', '411046', '8909478371', '9876543210', 'contact@riddhisiddhitiara.com', 'starter', '2025-12-16 11:55:39', '2025-12-16 11:55:39', 'pending'),
-(3, 'Ocean Breeze Towers', 'Palm Beach Road, Sector 14, Vashi', 'Navi Mumbai', 'Maharashtra', 'India', '400703', 'Mr. Amit Shah', '9823456789', 'admin@oceanbreezetowers.com', 'starter', '2025-12-18 09:41:12', '2026-05-11 07:43:49', 'verified'),
-(4, 'Prestige Lakeside Habitat', 'Whitefield Main Road, Varthur Lake', 'Bangalore', 'Karnataka', 'India', '560066', 'Ms. Shruti Rao', '8765432109', 'info@prestigelakeside.in', 'starter', '2025-12-18 09:41:28', '2025-12-18 09:41:28', 'pending'),
-(8, 'Raheja Vivarea', 'Mahalaxmi East, Jacob Circle', 'Mumbai', 'Maharashtra', 'India', '400011', 'Mr. Rohan Kapoor', '8654321098', 'info@rahejaviarea.com', 'starter', '2025-12-18 09:42:04', '2025-12-18 09:42:04', 'pending'),
-(9, 'Sobha Dream Acres', 'Balagere, Panathur Road', 'Bangalore', 'Karnataka', 'India', '560087', 'Mr. Anil Kumar', '7789012345', 'secretary@sobhadreamacres.in', 'starter', '2025-12-18 09:42:11', '2025-12-18 09:42:11', 'pending'),
-(10, 'Eldeco Eden Park', 'Nehru Place Extension, Greater Kailash', 'New Delhi', 'Delhi', 'India', '110019', 'Mrs. Ritu Malhotra', '9013456782', 'admin@eldecoedenpark.co.in', 'starter', '2025-12-18 09:42:18', '2026-05-11 07:43:54', 'rejected'),
-(11, 'Phoenix Golf Edge', 'Gachibowli Financial District', 'Hyderabad', 'Telangana', 'India', '500032', 'Mr. Suresh Babu', '8234567891', 'contact@phoenixgolfedge.com', 'starter', '2025-12-18 09:42:32', '2025-12-18 09:42:32', 'pending'),
-(12, 'Adarsh Palm Retreat', 'Outer Ring Road, Bellandur', 'Bangalore', 'Karnataka', 'India', '560103', 'Ms. Divya Nair', '9456781234', 'manager@adarshpalmretreat.in', 'starter', '2025-12-18 09:42:40', '2025-12-18 09:42:40', 'pending'),
-(13, 'Riverview Condominiums', '125 Hudson Yards, Midtown West', 'New York', 'NY', 'USA', '10001', 'Mr. James Carter', '+12125550188', 'admin@riverviewcondosnyc.com', 'starter', '2025-12-18 10:00:32', '2025-12-18 10:00:32', 'pending'),
-(14, 'Skyline Vista Residences', '350 Fifth Avenue, Midtown', 'New York', 'NY', 'USA', '10118', 'Mr. Robert Hayes', '+12127363100', 'admin@skylinevista.nyc', 'starter', '2025-12-18 10:00:44', '2025-12-18 10:00:44', 'pending'),
-(15, 'Thames Riverside Apartments', 'One St George Wharf, Vauxhall', 'London', '', 'United Kingdom', 'SW8 2LE', 'Ms. Olivia Bennett', '+442079285555', 'management@thamesriverside.co.uk', 'starter', '2025-12-18 10:00:51', '2026-05-11 07:43:57', 'suspended'),
-(16, 'Aurora Bay Condominiums', '100 Queens Quay East', 'Toronto', 'Ontario', 'Canada', 'M5E 1V5', 'Mr. Liam Chen', '+14165550192', 'info@aurorabay.ca', 'starter', '2025-12-18 10:01:00', '2025-12-18 10:01:00', 'pending'),
-(17, 'Harbourfront Elite Towers', '88 Harbour Street', 'Sydney', 'NSW', 'Australia', '2000', 'Ms. Emily Watson', '+61292641234', 'admin@harbourfrontelite.com.au', 'starter', '2025-12-18 10:01:11', '2025-12-18 10:01:11', 'pending'),
-(18, 'Emerald Hill Residences', '8 Emerald Hill Road', 'Singapore', '', 'Singapore', '229307', 'Mr. Daniel Lim', '+6567338899', 'contact@emeraldhill.sg', 'starter', '2025-12-18 10:01:17', '2025-12-18 10:01:17', 'pending'),
-(19, 'Palm Jumeirah Villas', 'Frond O, The Palm Jumeirah', 'Dubai', '', 'United Arab Emirates', '', 'Ms. Noor Ahmed', '+97145678901', 'manager@palmjumeirahvillas.ae', 'starter', '2025-12-18 10:01:23', '2025-12-18 10:01:23', 'pending'),
-(20, 'Shibuya Sky Residences', '2-24-12 Shibuya, Shibuya-ku', 'Tokyo', '', 'Japan', '150-0002', 'Ms. Yumi Sato', '+81354231111', 'admin@shibuyasky.jp', 'starter', '2025-12-18 10:01:32', '2025-12-18 10:01:32', 'pending'),
-(21, 'Montmartre Heights', '12 Rue de l\'Abreuvoir, 18th Arrondissement', 'Paris', '', 'France', '75018', 'Mr. Louis Moreau', '+33142645555', 'contact@montmartreheights.fr', 'starter', '2025-12-18 10:01:37', '2026-05-11 07:44:00', 'verified'),
-(22, 'Barcelona Seafront Residences', 'Passeig Marítim 45, Barceloneta', 'Barcelona', 'Catalonia', 'Spain', '08003', 'Ms. Sofia Ramirez', '+34932956789', 'info@barcelonaseafront.es', 'starter', '2025-12-18 10:01:42', '2025-12-18 10:01:42', 'pending'),
-(23, 'Chao Phraya Riverside Condo', '123 Charoen Krung Road, Bang Rak', 'Bangkok', '', 'Thailand', '10500', 'Mr. Thanawat Srisuk', '+6621234567', 'management@chaophrayariverside.th', 'starter', '2025-12-18 10:01:49', '2025-12-18 10:01:49', 'pending'),
-(24, 'Ocean Pearl Residency', 'Plot 45, Sector 17, Palm Beach Road, Nerul', 'Navi Mumbai', 'Maharashtra', 'India', '400706', 'Mr. Vikram Desai', '+919820012345', 'admin@oceanpearlresidency.in', 'starter', '2025-12-18 10:28:23', '2026-05-11 07:44:05', 'approved'),
-(25, 'Celestial Heights Towers', 'Off Veera Desai Road, Andheri West', 'Mumbai', 'Maharashtra', 'India', '400058', 'Ms. Priya Malhotra', '+912226789012', 'management@celestialheightsmumbai.com', 'starter', '2025-12-18 10:28:29', '2025-12-18 10:28:29', 'pending'),
-(26, 'Imperial Crown Cooperative', 'Near Infinity Mall, New Link Road, Malad West', 'Mumbai', 'Maharashtra', 'India', '400064', 'Mr. Arjun Mehta', '+919867543210', 'secretary@imperialcrown.co.in', 'starter', '2025-12-18 10:28:40', '2025-12-18 10:28:40', 'pending'),
-(27, 'Marine Vista Apartments', 'Carter Road, Bandra West', 'Mumbai', 'Maharashtra', 'India', '400050', 'Ms. Natasha Fernandes', '+919820156789', 'info@marinevistabanddra.in', 'starter', '2025-12-18 10:28:48', '2026-05-11 07:44:10', 'approved'),
-(28, 'Sunset Bay Enclave', 'Juhu Tara Road, Near JW Marriott', 'Mumbai', 'Maharashtra', 'India', '400049', 'Mr. Rohan Kapoor', '+912226147890', 'contact@sunsetbayjuhu.com', 'starter', '2025-12-18 10:28:52', '2025-12-18 10:28:52', 'pending'),
-(29, 'Greenwood Elite Residency', 'Sector 62, Near Fortis Hospital', 'Noida', 'Uttar Pradesh', 'India', '201301', 'Mr. Rajiv Sharma', '+919810023456', 'manager@greenwoodelite.in', 'starter', '2025-12-18 10:29:02', '2025-12-18 10:29:02', 'pending'),
-(30, 'Heritage Grand Apartments', 'Golf Course Road, DLF Phase 5', 'Gurugram', 'Haryana', 'India', '122002', 'Ms. Anjali Verma', '+911244567890', 'info@heritagegrandgurugram.com', 'starter', '2025-12-18 10:29:08', '2025-12-18 10:29:08', 'pending'),
-(31, 'Silver Oak Residency', 'Vasant Kunj, Sector D', 'New Delhi', 'Delhi', 'India', '110070', 'Mr. Karan Singh', '+919811134567', 'admin@silveroakvasantkunj.in', 'starter', '2025-12-18 10:29:22', '2025-12-18 10:29:22', 'pending'),
-(32, 'Central Park Towers', 'Sector 48, Sohna Road', 'Gurugram', 'Haryana', 'India', '122018', 'Ms. Riya Gupta', '+919876543210', 'contact@centralparktowers.co.in', 'starter', '2025-12-18 10:29:30', '2025-12-18 10:29:30', 'pending'),
-(33, 'Riverside Greens Society', 'Mayur Vihar Phase 1, Near Noida Link Road', 'Delhi', 'Delhi', 'India', '110091', 'Mr. Sameer Ahuja', '+911122756789', 'secretary@riversidegreens.in', 'starter', '2025-12-18 10:29:35', '2025-12-18 10:29:35', 'pending'),
-(34, 'Prestige Boulevard', 'Dwarka Sector 22', 'New Delhi', 'Delhi', 'India', '110077', 'Ms. Sneha Rao', '+919891234567', 'management@prestigeboulevarddwarka.in', 'starter', '2025-12-18 10:29:40', '2025-12-18 10:29:40', 'pending'),
-(35, 'Sun Universe', 'Near pluse hospital, Navle Bridge', 'Pune', 'Maharashtra', 'India', '411041', 'Mr. Ashok Patil', '+919050505050', 'admin@sununiverse.com', 'starter', '2026-05-07 09:55:04', '2026-05-07 09:55:04', 'pending'),
-(36, 'Avenir Residency', 'ieuf foeiwf', 'kejfnw', 'qkejfwn', 'India', '234567', 'Facilities Pune', '+919080908090', 'facilities.pune@coepd.com', 'professional', '2026-05-08 10:34:13', '2026-05-08 10:34:13', 'pending'),
-(37, 'Example 1 society', 'ieuf foeiwf', 'kejfnw', 'qkejfwn', 'India', '234567', 'Facilities Pune', '+919383673712', 'oiuytrffgc@gmail.com', 'professional', '2026-05-11 08:25:41', '2026-05-11 08:25:41', 'approved');
+INSERT INTO `societies` (`id`, `name`, `code`, `address`, `city`, `state`, `country`, `pincode`, `towers`, `total_flats`, `admin_id`, `contact_person`, `contact_phone`, `contact_email`, `plan`, `created_at`, `updated_at`, `status`) VALUES
+(1, 'Blue Horizon Apartments', NULL, 'Sector 7, Aundh-Baner Link Road', 'Pune', 'Maharashtra', 'India', '411007', 1, 0, NULL, 'Ms. Priya Nair', '9456789012', 'contact@bluehorizonpune.com', 'starter', '2025-12-16 11:55:27', '2026-05-11 07:43:45', 'approved'),
+(2, 'Riddhi-Siddhi Tiara', NULL, 'Sinhgad College Campus', 'Pune', 'Maharashtra', 'India', '411046', 1, 0, NULL, '8909478371', '9876543210', 'contact@riddhisiddhitiara.com', 'starter', '2025-12-16 11:55:39', '2025-12-16 11:55:39', 'pending'),
+(3, 'Ocean Breeze Towers', NULL, 'Palm Beach Road, Sector 14, Vashi', 'Navi Mumbai', 'Maharashtra', 'India', '400703', 1, 0, NULL, 'Mr. Amit Shah', '9823456789', 'admin@oceanbreezetowers.com', 'starter', '2025-12-18 09:41:12', '2026-05-11 07:43:49', 'verified'),
+(4, 'Prestige Lakeside Habitat', NULL, 'Whitefield Main Road, Varthur Lake', 'Bangalore', 'Karnataka', 'India', '560066', 1, 0, NULL, 'Ms. Shruti Rao', '8765432109', 'info@prestigelakeside.in', 'starter', '2025-12-18 09:41:28', '2025-12-18 09:41:28', 'pending'),
+(8, 'Raheja Vivarea', NULL, 'Mahalaxmi East, Jacob Circle', 'Mumbai', 'Maharashtra', 'India', '400011', 1, 0, NULL, 'Mr. Rohan Kapoor', '8654321098', 'info@rahejaviarea.com', 'starter', '2025-12-18 09:42:04', '2025-12-18 09:42:04', 'pending'),
+(9, 'Sobha Dream Acres', NULL, 'Balagere, Panathur Road', 'Bangalore', 'Karnataka', 'India', '560087', 1, 0, NULL, 'Mr. Anil Kumar', '7789012345', 'secretary@sobhadreamacres.in', 'starter', '2025-12-18 09:42:11', '2025-12-18 09:42:11', 'pending'),
+(10, 'Eldeco Eden Park', NULL, 'Nehru Place Extension, Greater Kailash', 'New Delhi', 'Delhi', 'India', '110019', 1, 0, NULL, 'Mrs. Ritu Malhotra', '9013456782', 'admin@eldecoedenpark.co.in', 'starter', '2025-12-18 09:42:18', '2026-05-11 07:43:54', 'rejected'),
+(11, 'Phoenix Golf Edge', NULL, 'Gachibowli Financial District', 'Hyderabad', 'Telangana', 'India', '500032', 1, 0, NULL, 'Mr. Suresh Babu', '8234567891', 'contact@phoenixgolfedge.com', 'starter', '2025-12-18 09:42:32', '2025-12-18 09:42:32', 'pending'),
+(12, 'Adarsh Palm Retreat', NULL, 'Outer Ring Road, Bellandur', 'Bangalore', 'Karnataka', 'India', '560103', 1, 0, NULL, 'Ms. Divya Nair', '9456781234', 'manager@adarshpalmretreat.in', 'starter', '2025-12-18 09:42:40', '2025-12-18 09:42:40', 'pending'),
+(13, 'Riverview Condominiums', NULL, '125 Hudson Yards, Midtown West', 'New York', 'NY', 'USA', '10001', 1, 0, NULL, 'Mr. James Carter', '+12125550188', 'admin@riverviewcondosnyc.com', 'starter', '2025-12-18 10:00:32', '2025-12-18 10:00:32', 'pending'),
+(14, 'Skyline Vista Residences', NULL, '350 Fifth Avenue, Midtown', 'New York', 'NY', 'USA', '10118', 1, 0, NULL, 'Mr. Robert Hayes', '+12127363100', 'admin@skylinevista.nyc', 'starter', '2025-12-18 10:00:44', '2025-12-18 10:00:44', 'pending'),
+(15, 'Thames Riverside Apartments', NULL, 'One St George Wharf, Vauxhall', 'London', '', 'United Kingdom', 'SW8 2LE', 1, 0, NULL, 'Ms. Olivia Bennett', '+442079285555', 'management@thamesriverside.co.uk', 'starter', '2025-12-18 10:00:51', '2026-05-11 07:43:57', 'suspended'),
+(16, 'Aurora Bay Condominiums', NULL, '100 Queens Quay East', 'Toronto', 'Ontario', 'Canada', 'M5E 1V5', 1, 0, NULL, 'Mr. Liam Chen', '+14165550192', 'info@aurorabay.ca', 'starter', '2025-12-18 10:01:00', '2025-12-18 10:01:00', 'pending'),
+(17, 'Harbourfront Elite Towers', NULL, '88 Harbour Street', 'Sydney', 'NSW', 'Australia', '2000', 1, 0, NULL, 'Ms. Emily Watson', '+61292641234', 'admin@harbourfrontelite.com.au', 'starter', '2025-12-18 10:01:11', '2025-12-18 10:01:11', 'pending'),
+(18, 'Emerald Hill Residences', NULL, '8 Emerald Hill Road', 'Singapore', '', 'Singapore', '229307', 1, 0, NULL, 'Mr. Daniel Lim', '+6567338899', 'contact@emeraldhill.sg', 'starter', '2025-12-18 10:01:17', '2025-12-18 10:01:17', 'pending'),
+(19, 'Palm Jumeirah Villas', NULL, 'Frond O, The Palm Jumeirah', 'Dubai', '', 'United Arab Emirates', '', 1, 0, NULL, 'Ms. Noor Ahmed', '+97145678901', 'manager@palmjumeirahvillas.ae', 'starter', '2025-12-18 10:01:23', '2025-12-18 10:01:23', 'pending'),
+(20, 'Shibuya Sky Residences', NULL, '2-24-12 Shibuya, Shibuya-ku', 'Tokyo', '', 'Japan', '150-0002', 1, 0, NULL, 'Ms. Yumi Sato', '+81354231111', 'admin@shibuyasky.jp', 'starter', '2025-12-18 10:01:32', '2025-12-18 10:01:32', 'pending'),
+(21, 'Montmartre Heights', NULL, '12 Rue de l\'Abreuvoir, 18th Arrondissement', 'Paris', '', 'France', '75018', 1, 0, NULL, 'Mr. Louis Moreau', '+33142645555', 'contact@montmartreheights.fr', 'starter', '2025-12-18 10:01:37', '2026-05-11 07:44:00', 'verified'),
+(22, 'Barcelona Seafront Residences', NULL, 'Passeig Marítim 45, Barceloneta', 'Barcelona', 'Catalonia', 'Spain', '08003', 1, 0, NULL, 'Ms. Sofia Ramirez', '+34932956789', 'info@barcelonaseafront.es', 'starter', '2025-12-18 10:01:42', '2025-12-18 10:01:42', 'pending'),
+(23, 'Chao Phraya Riverside Condo', NULL, '123 Charoen Krung Road, Bang Rak', 'Bangkok', '', 'Thailand', '10500', 1, 0, NULL, 'Mr. Thanawat Srisuk', '+6621234567', 'management@chaophrayariverside.th', 'starter', '2025-12-18 10:01:49', '2025-12-18 10:01:49', 'pending'),
+(24, 'Ocean Pearl Residency', NULL, 'Plot 45, Sector 17, Palm Beach Road, Nerul', 'Navi Mumbai', 'Maharashtra', 'India', '400706', 1, 0, NULL, 'Mr. Vikram Desai', '+919820012345', 'admin@oceanpearlresidency.in', 'starter', '2025-12-18 10:28:23', '2026-05-11 07:44:05', 'approved'),
+(25, 'Celestial Heights Towers', NULL, 'Off Veera Desai Road, Andheri West', 'Mumbai', 'Maharashtra', 'India', '400058', 1, 0, NULL, 'Ms. Priya Malhotra', '+912226789012', 'management@celestialheightsmumbai.com', 'starter', '2025-12-18 10:28:29', '2025-12-18 10:28:29', 'pending'),
+(26, 'Imperial Crown Cooperative', NULL, 'Near Infinity Mall, New Link Road, Malad West', 'Mumbai', 'Maharashtra', 'India', '400064', 1, 0, NULL, 'Mr. Arjun Mehta', '+919867543210', 'secretary@imperialcrown.co.in', 'starter', '2025-12-18 10:28:40', '2025-12-18 10:28:40', 'pending'),
+(27, 'Marine Vista Apartments', NULL, 'Carter Road, Bandra West', 'Mumbai', 'Maharashtra', 'India', '400050', 1, 0, NULL, 'Ms. Natasha Fernandes', '+919820156789', 'info@marinevistabanddra.in', 'starter', '2025-12-18 10:28:48', '2026-05-11 07:44:10', 'approved'),
+(28, 'Sunset Bay Enclave', NULL, 'Juhu Tara Road, Near JW Marriott', 'Mumbai', 'Maharashtra', 'India', '400049', 1, 0, NULL, 'Mr. Rohan Kapoor', '+912226147890', 'contact@sunsetbayjuhu.com', 'starter', '2025-12-18 10:28:52', '2025-12-18 10:28:52', 'pending'),
+(29, 'Greenwood Elite Residency', NULL, 'Sector 62, Near Fortis Hospital', 'Noida', 'Uttar Pradesh', 'India', '201301', 1, 0, NULL, 'Mr. Rajiv Sharma', '+919810023456', 'manager@greenwoodelite.in', 'starter', '2025-12-18 10:29:02', '2025-12-18 10:29:02', 'pending'),
+(30, 'Heritage Grand Apartments', NULL, 'Golf Course Road, DLF Phase 5', 'Gurugram', 'Haryana', 'India', '122002', 1, 0, NULL, 'Ms. Anjali Verma', '+911244567890', 'info@heritagegrandgurugram.com', 'starter', '2025-12-18 10:29:08', '2025-12-18 10:29:08', 'pending'),
+(31, 'Silver Oak Residency', NULL, 'Vasant Kunj, Sector D', 'New Delhi', 'Delhi', 'India', '110070', 1, 0, NULL, 'Mr. Karan Singh', '+919811134567', 'admin@silveroakvasantkunj.in', 'starter', '2025-12-18 10:29:22', '2025-12-18 10:29:22', 'pending'),
+(32, 'Central Park Towers', NULL, 'Sector 48, Sohna Road', 'Gurugram', 'Haryana', 'India', '122018', 1, 0, NULL, 'Ms. Riya Gupta', '+919876543210', 'contact@centralparktowers.co.in', 'starter', '2025-12-18 10:29:30', '2025-12-18 10:29:30', 'pending'),
+(33, 'Riverside Greens Society', NULL, 'Mayur Vihar Phase 1, Near Noida Link Road', 'Delhi', 'Delhi', 'India', '110091', 1, 0, NULL, 'Mr. Sameer Ahuja', '+911122756789', 'secretary@riversidegreens.in', 'starter', '2025-12-18 10:29:35', '2025-12-18 10:29:35', 'pending'),
+(34, 'Prestige Boulevard', NULL, 'Dwarka Sector 22', 'New Delhi', 'Delhi', 'India', '110077', 1, 0, NULL, 'Ms. Sneha Rao', '+919891234567', 'management@prestigeboulevarddwarka.in', 'starter', '2025-12-18 10:29:40', '2025-12-18 10:29:40', 'pending'),
+(35, 'Sun Universe', NULL, 'Near pluse hospital, Navle Bridge', 'Pune', 'Maharashtra', 'India', '411041', 1, 0, NULL, 'Mr. Ashok Patil', '+919050505050', 'admin@sununiverse.com', 'starter', '2026-05-07 09:55:04', '2026-05-07 09:55:04', 'pending'),
+(36, 'Avenir Residency', NULL, 'ieuf foeiwf', 'kejfnw', 'qkejfwn', 'India', '234567', 1, 0, NULL, 'Facilities Pune', '+919080908090', 'facilities.pune@coepd.com', 'professional', '2026-05-08 10:34:13', '2026-05-08 10:34:13', 'pending'),
+(37, 'Example 1 society', NULL, 'ieuf foeiwf', 'kejfnw', 'qkejfwn', 'India', '234567', 1, 0, NULL, 'Facilities Pune', '+919383673712', 'oiuytrffgc@gmail.com', 'professional', '2026-05-11 08:25:41', '2026-05-11 08:25:41', 'approved');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `society_registrations`
+--
+
+CREATE TABLE `society_registrations` (
+  `id` int(11) NOT NULL,
+  `society_name` varchar(150) NOT NULL,
+  `address` text DEFAULT NULL,
+  `city` varchar(100) NOT NULL,
+  `state` varchar(100) DEFAULT NULL,
+  `country` varchar(100) DEFAULT 'India',
+  `pincode` varchar(10) DEFAULT NULL,
+  `towers` int(11) DEFAULT 1,
+  `total_flats` int(11) DEFAULT 0,
+  `contact_name` varchar(100) NOT NULL,
+  `contact_email` varchar(100) NOT NULL,
+  `contact_phone` varchar(20) NOT NULL,
+  `gst` varchar(20) DEFAULT NULL,
+  `pan` varchar(20) DEFAULT NULL,
+  `message` text DEFAULT NULL,
+  `status` enum('pending','new','under_review','approved','rejected') DEFAULT 'pending',
+  `reviewed_by` int(11) DEFAULT NULL,
+  `reviewed_at` timestamp NULL DEFAULT NULL,
+  `rejection_reason` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -1525,6 +1559,12 @@ ALTER TABLE `societies`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `society_registrations`
+--
+ALTER TABLE `society_registrations`
+  ADD PRIMARY KEY (`id`);
+
+--
 -- Indexes for table `tickets`
 --
 ALTER TABLE `tickets`
@@ -1879,6 +1919,12 @@ ALTER TABLE `sms_logs`
 --
 ALTER TABLE `societies`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=38;
+
+--
+-- AUTO_INCREMENT for table `society_registrations`
+--
+ALTER TABLE `society_registrations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `tickets`

@@ -117,10 +117,6 @@ class SuperAdminController extends BaseController
                 Response::notFound("Registration lead not found");
             }
 
-            if ($lead['status'] === 'approved') {
-                Response::error("This lead has already been approved", 400);
-            }
-
             // 2. Normalize Phone
             $normalizedPhone = $lead['contact_phone'];
             $cleanPhone = preg_replace('/[^\d+]/', '', $normalizedPhone);
@@ -134,24 +130,27 @@ class SuperAdminController extends BaseController
                 $normalizedPhone = '+' . $digitsOnly;
             }
 
-            // 3. Create Society
+            // 3. Create Society (with all fields from the registration)
             $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
-            
+
             $societyId = $this->insert('societies', [
-                'name' => $lead['society_name'],
-                'code' => $code,
-                'address' => $lead['address'] ?? '',
-                'city' => $lead['city'],
-                'state' => $lead['state'] ?? '',
-                'country' => 'India',
-                'pincode' => $lead['pincode'] ?? '',
-                'contact_person' => $lead['contact_name'],
-                'contact_phone' => $normalizedPhone,
-                'contact_email' => $lead['contact_email'],
-                'plan' => 'starter',
-                'towers' => $lead['towers'] ?? 1,
-                'total_flats' => $lead['total_flats'] ?? 0,
-                'status' => 'approved'
+                'name'            => $lead['society_name'],
+                'code'            => $code,
+                'address'         => $lead['address'] ?? '',
+                'city'            => $lead['city'],
+                'state'           => $lead['state'] ?? '',
+                'country'         => 'India',
+                'pincode'         => $lead['pincode'] ?? '',
+                'contact_person'  => $lead['contact_name'],
+                'contact_phone'   => $normalizedPhone,
+                'contact_email'   => $lead['contact_email'],
+                'plan'            => 'starter',
+                'towers'          => $lead['towers'] ?? 1,
+                'total_flats'     => $lead['total_flats'] ?? 0,
+                'gst'             => $lead['gst'] ?: null,
+                'pan'             => $lead['pan'] ?: null,
+                'registration_id' => (int)$id,
+                'status'          => 'approved'
             ]);
 
             // 4. Create Admin User
@@ -161,34 +160,34 @@ class SuperAdminController extends BaseController
 
             $adminId = $this->insert('users', [
                 'app_user_id' => $appUserId,
-                'name' => $lead['contact_name'],
-                'email' => $lead['contact_email'],
-                'phone' => $normalizedPhone,
-                'password' => $hashedPassword,
-                'role' => 'admin',
-                'society_id' => $societyId,
-                'status' => 'active'
+                'name'        => $lead['contact_name'],
+                'email'       => $lead['contact_email'],
+                'phone'       => $normalizedPhone,
+                'password'    => $hashedPassword,
+                'role'        => 'admin',
+                'society_id'  => $societyId,
+                'status'      => 'active'
             ]);
 
             // 5. Link Admin to Society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // 6. Update Lead Status
-            $this->update('society_registrations', [
-                'status' => 'approved',
-                'reviewed_at' => date('Y-m-d H:i:s')
-            ], 'id = :id', ['id' => $id]);
+            // 6. Delete the registration lead — it now lives in the societies table
+            $this->delete('society_registrations', 'id = ?', [(int)$id]);
+
+            $this->commit();
 
             Response::success("Lead approved and society activated", [
-                'society_id' => $societyId,
+                'society_id'   => $societyId,
                 'society_name' => $lead['society_name'],
-                'code' => $code,
-                'admin_email' => $lead['contact_email'],
-                'admin_phone' => $normalizedPhone,
-                'password' => $password
+                'code'         => $code,
+                'admin_email'  => $lead['contact_email'],
+                'admin_phone'  => $normalizedPhone,
+                'password'     => $password
             ]);
 
         } catch (Exception $e) {
+            $this->rollback();
             error_log("Approve lead error: " . $e->getMessage());
             Response::error("Failed to approve lead: " . $e->getMessage(), 500);
         }
