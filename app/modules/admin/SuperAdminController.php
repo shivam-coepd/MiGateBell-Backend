@@ -1,210 +1,371 @@
 <?php
 require_once __DIR__ . '/../../core/BaseController.php';
 
+/**
+ * SuperAdminController
+ *
+ * Design contract:
+ *  - society_registrations  = permanent lead/audit table. NEVER deleted. Status: new → under_review → approved | rejected
+ *  - societies              = live society table. Created on approval. Linked via societies.registration_id → society_registrations.id
+ *  - Any status/field change on either table is immediately mirrored to the other via syncSocietyToReg() / syncRegToSociety()
+ */
 class SuperAdminController extends BaseController
 {
+    // ─── PRIVATE HELPERS ────────────────────────────────────────────────────
+
+    /**
+     * Ensure all extra columns exist in societies table.
+     * Called once per request that writes to societies. Safe to run repeatedly.
+     */
+    private function ensureSocietyColumns(): void
+    {
+        $alters = [
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `code` varchar(20) DEFAULT NULL AFTER `name`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `towers` int(11) DEFAULT 1 AFTER `pincode`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `total_flats` int(11) DEFAULT 0 AFTER `towers`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `admin_id` int(11) DEFAULT NULL AFTER `total_flats`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `gst` varchar(20) DEFAULT NULL AFTER `admin_id`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `pan` varchar(20) DEFAULT NULL AFTER `gst`",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL AFTER `pan`",
+        ];
+        foreach ($alters as $sql) {
+            try { $this->db->exec($sql); } catch (Exception $e) {}
+        }
+    }
+
+    /**
+     * Mirror a society's key fields + status back to its linked registration row.
+     * Called after any societies UPDATE.
+     */
+    private function syncSocietyToReg(int $societyId): void
+    {
+        try {
+            $stmt = $this->db->prepare(
+                "SELECT s.registration_id, s.name, s.address, s.city, s.state, s.pincode,
+                        s.contact_person, s.contact_phone, s.contact_email,
+                        s.towers, s.total_flats, s.gst, s.pan, s.status
+                 FROM societies s WHERE s.id = ?"
+            );
+            $stmt->execute([$societyId]);
+            $soc = $stmt->fetch();
+            if (!$soc || empty($soc['registration_id'])) return;
+
+            // Map society status → registration status
+            $statusMap = [
+                'approved'  => 'approved',
+                'pending'   => 'under_review',
+                'verified'  => 'under_review',
+                'rejected'  => 'rejected',
+                'suspended' => 'rejected',
+            ];
+            $regStatus = $statusMap[$soc['status']] ?? 'under_review';
+
+            $this->update('society_registrations', [
+                'society_name'  => $soc['name'],
+                'address'       => $soc['address'],
+                'city'          => $soc['city'],
+                'state'         => $soc['state'],
+                'pincode'       => $soc['pincode'],
+                'contact_name'  => $soc['contact_person'],
+                'contact_phone' => $soc['contact_phone'],
+                'contact_email' => $soc['contact_email'],
+                'towers'        => $soc['towers'],
+                'total_flats'   => $soc['total_flats'],
+                'gst'           => $soc['gst'],
+                'pan'           => $soc['pan'],
+                'status'        => $regStatus,
+                'reviewed_at'   => date('Y-m-d H:i:s'),
+            ], 'id = :id', ['id' => $soc['registration_id']]);
+        } catch (Exception $e) {
+            error_log("syncSocietyToReg failed: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Mirror a registration's key fields + status to its linked society row (if exists).
+     * Called after any society_registrations UPDATE.
+     */
+    private function syncRegToSociety(int $regId): void
+    {
+        try {
+            $stmt = $this->db->prepare(
+                "SELECT r.society_name, r.address, r.city, r.state, r.pincode,
+                        r.contact_name, r.contact_phone, r.contact_email,
+                        r.towers, r.total_flats, r.gst, r.pan, r.status
+                 FROM society_registrations r WHERE r.id = ?"
+            );
+            $stmt->execute([$regId]);
+            $reg = $stmt->fetch();
+            if (!$reg) return;
+
+            // Check if a society is linked to this registration
+            $stmt2 = $this->db->prepare("SELECT id FROM societies WHERE registration_id = ?");
+            $stmt2->execute([$regId]);
+            $soc = $stmt2->fetch();
+            if (!$soc) return;
+
+            $statusMap = [
+                'approved'     => 'approved',
+                'under_review' => 'pending',
+                'rejected'     => 'rejected',
+                'pending'      => 'pending',
+                'new'          => 'pending',
+            ];
+            $socStatus = $statusMap[$reg['status']] ?? 'pending';
+
+            $this->update('societies', [
+                'name'           => $reg['society_name'],
+                'address'        => $reg['address'],
+                'city'           => $reg['city'],
+                'state'          => $reg['state'],
+                'pincode'        => $reg['pincode'],
+                'contact_person' => $reg['contact_name'],
+                'contact_phone'  => $reg['contact_phone'],
+                'contact_email'  => $reg['contact_email'],
+                'towers'         => $reg['towers'],
+                'total_flats'    => $reg['total_flats'],
+                'gst'            => $reg['gst'],
+                'pan'            => $reg['pan'],
+                'status'         => $socStatus,
+            ], 'id = :id', ['id' => $soc['id']]);
+        } catch (Exception $e) {
+            error_log("syncRegToSociety failed: " . $e->getMessage());
+        }
+    }
+
+    /** Normalize a phone number to E.164 format (+91XXXXXXXXXX for Indian numbers). */
+    private function normalizePhone(string $phone): string
+    {
+        $clean = preg_replace('/[^\d+]/', '', $phone);
+        if (substr($clean, 0, 1) !== '+' && preg_match('/^\d{10}$/', preg_replace('/\D/', '', $clean))) {
+            $clean = '+91' . preg_replace('/\D/', '', $clean);
+        }
+        $digits = ltrim($clean, '+');
+        return preg_match('/^\d{8,15}$/', $digits) ? '+' . $digits : $phone;
+    }
+
+    // ─── STATS ──────────────────────────────────────────────────────────────
     public function getStats()
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-
+            $this->auth->authorize('super_admin');
             $stats = [];
-            
-            // Total Societies
+
             $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies");
             $stats['totalSocieties'] = $stmt->fetch()['count'];
 
-            // Status counts (assuming status column was added)
-            // If the column doesn't exist, these will default to 0
             try {
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'approved'");
-                $stats['approved'] = $stmt->fetch()['count'];
-                
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'pending'");
-                $stats['pending'] = $stmt->fetch()['count'];
-
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM societies WHERE status COLLATE utf8mb4_unicode_ci = 'verified'");
-                $stats['verified'] = $stmt->fetch()['count'];
+                foreach (['approved','pending','verified'] as $s) {
+                    $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE status = ?");
+                    $stmt->execute([$s]);
+                    $stats[$s] = $stmt->fetch()['count'];
+                }
             } catch (Exception $e) {
-                $stats['approved'] = 0;
-                $stats['pending'] = 0;
-                $stats['verified'] = 0;
+                $stats['approved'] = $stats['pending'] = $stats['verified'] = 0;
             }
 
-            // Registrations
             try {
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status COLLATE utf8mb4_unicode_ci = 'new'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'new'");
                 $stats['newLeads'] = $stmt->fetch()['count'];
-
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status COLLATE utf8mb4_unicode_ci = 'under_review'");
+                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'under_review'");
                 $stats['underReview'] = $stmt->fetch()['count'];
             } catch (Exception $e) {
-                $stats['newLeads'] = 0;
-                $stats['underReview'] = 0;
+                $stats['newLeads'] = $stats['underReview'] = 0;
             }
 
-            // Admins & Residents
             $stmt = $this->db->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
             $stats['totalAdmins'] = $stmt->fetch()['count'];
-
             $stmt = $this->db->query("SELECT COUNT(*) as count FROM users WHERE role = 'resident'");
             $stats['totalResidents'] = $stmt->fetch()['count'];
 
-            // Trend
             $stats['trend'] = [];
             for ($i = 5; $i >= 0; $i--) {
                 $d = new DateTime("-$i months");
-                $month = $d->format('Y-m');
-                $display = $d->format('M y');
-                
-                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE DATE_FORMAT(created_at, '%Y-%m') COLLATE utf8mb4_unicode_ci = ? COLLATE utf8mb4_unicode_ci");
-                $stmt->execute([$month]);
-                
-                $stats['trend'][] = [
-                    'month' => $display,
-                    'count' => $stmt->fetch()['count']
-                ];
+                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE DATE_FORMAT(created_at,'%Y-%m') = ?");
+                $stmt->execute([$d->format('Y-m')]);
+                $stats['trend'][] = ['month' => $d->format('M y'), 'count' => $stmt->fetch()['count']];
             }
 
-            // Plan Dist
             $stats['planDist'] = [];
-            $plans = ['starter', 'professional', 'enterprise'];
-            foreach ($plans as $plan) {
+            foreach (['starter','professional','enterprise'] as $plan) {
                 try {
                     $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE plan = ?");
                     $stmt->execute([$plan]);
-                    $stats['planDist'][] = [
-                        'plan' => $plan,
-                        'count' => $stmt->fetch()['count']
-                    ];
+                    $stats['planDist'][] = ['plan' => $plan, 'count' => $stmt->fetch()['count']];
                 } catch (Exception $e) {
                     $stats['planDist'][] = ['plan' => $plan, 'count' => 0];
                 }
             }
 
             Response::success("Stats retrieved", $stats);
-
         } catch (Exception $e) {
             error_log("Get stats error: " . $e->getMessage());
             Response::error("Failed to retrieve stats: " . $e->getMessage(), 500);
         }
     }
 
+    // ─── REGISTRATIONS ──────────────────────────────────────────────────────
+
     public function getRegistrations()
     {
         try {
             $this->auth->authorize('super_admin');
-            $query = "SELECT id, society_name as societyName, address, city, state, pincode, towers, total_flats as totalFlats, contact_name as contactName, contact_email as contactEmail, contact_phone as contactPhone, gst, pan, message, status, created_at as createdAt FROM society_registrations ORDER BY created_at DESC";
-            $stmt = $this->db->query($query);
-            $regs = $stmt->fetchAll();
-            Response::success("Registrations retrieved", $regs);
+            $stmt = $this->db->query(
+                "SELECT id, society_name as societyName, address, city, state, pincode,
+                        towers, total_flats as totalFlats,
+                        contact_name as contactName, contact_email as contactEmail, contact_phone as contactPhone,
+                        gst, pan, message, status, created_at as createdAt
+                 FROM society_registrations ORDER BY created_at DESC"
+            );
+            Response::success("Registrations retrieved", $stmt->fetchAll());
         } catch (Exception $e) {
             Response::error("Failed to retrieve registrations: " . $e->getMessage(), 500);
         }
     }
 
+    /** Public endpoint — called from the landing page form. */
+    public function createRegistration()
+    {
+        try {
+            $data = json_decode(file_get_contents("php://input"), true);
+            $errors = $this->validateRequiredFields($data, ['societyName','city','contactName','contactEmail','contactPhone']);
+            if (!empty($errors)) Response::validationError($errors);
+
+            $id = $this->insert('society_registrations', [
+                'society_name'  => $data['societyName'],
+                'address'       => $data['address']      ?? '',
+                'city'          => $data['city'],
+                'state'         => $data['state']        ?? '',
+                'pincode'       => $data['pincode']      ?? '',
+                'towers'        => $data['towers']       ?? 1,
+                'total_flats'   => $data['totalFlats']   ?? 0,
+                'contact_name'  => $data['contactName'],
+                'contact_email' => $data['contactEmail'],
+                'contact_phone' => $data['contactPhone'],
+                'gst'           => $data['gst']          ?? null,
+                'pan'           => $data['pan']          ?? null,
+                'message'       => $data['message']      ?? null,
+                'status'        => 'new',
+            ]);
+            Response::success("Registration submitted successfully. Our team will review and contact you shortly.", ['id' => $id], 201);
+        } catch (Exception $e) {
+            Response::error("Failed to create registration: " . $e->getMessage(), 500);
+        }
+    }
+
+    /** Super admin updates registration status (new → under_review | rejected). Syncs to societies. */
+    public function updateRegistration($id)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+            $data = json_decode(file_get_contents("php://input"), true);
+
+            $updateData = [];
+            if (isset($data['status']))          $updateData['status']           = $data['status'];
+            if (isset($data['reviewedBy']))       $updateData['reviewed_by']      = $data['reviewedBy'];
+            if (isset($data['rejectionReason']))  $updateData['rejection_reason'] = $data['rejectionReason'];
+
+            if (!empty($updateData)) {
+                $updateData['reviewed_at'] = date('Y-m-d H:i:s');
+                $this->update('society_registrations', $updateData, 'id = :id', ['id' => $id]);
+                // Mirror status change to linked society (if it exists)
+                $this->syncRegToSociety((int)$id);
+            }
+
+            Response::success("Registration updated");
+        } catch (Exception $e) {
+            Response::error("Failed to update registration: " . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Approve a registration lead:
+     *  1. Create society row (idempotent — checks for existing society with same registration_id)
+     *  2. Create or reuse admin user
+     *  3. Mark registration as 'approved' (NOT deleted — kept for audit + sync)
+     */
     public function approveRegistrationLead($id)
     {
         try {
             $this->auth->authorize('super_admin');
 
-            // 1. Fetch Lead
+            // Fetch lead
             $stmt = $this->db->prepare("SELECT * FROM society_registrations WHERE id = ?");
             $stmt->execute([$id]);
             $lead = $stmt->fetch();
-            if (!$lead) {
-                Response::notFound("Registration lead not found");
+            if (!$lead) Response::notFound("Registration lead not found");
+
+            // Idempotency: if a society already exists for this registration, don't create another
+            $this->ensureSocietyColumns();
+            $stmt = $this->db->prepare("SELECT id FROM societies WHERE registration_id = ?");
+            $stmt->execute([$id]);
+            $existing = $stmt->fetch();
+            if ($existing) {
+                Response::error("This registration has already been approved (society #" . $existing['id'] . " exists).", 409);
             }
 
-            // 2. Normalize Phone
-            $normalizedPhone = $lead['contact_phone'];
-            $cleanPhone = preg_replace('/[^\d+]/', '', $normalizedPhone);
-            if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
-                if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
-                    $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
-                }
-            }
-            $digitsOnly = ltrim($cleanPhone, '+');
-            if (preg_match('/^\d{8,15}$/', $digitsOnly)) {
-                $normalizedPhone = '+' . $digitsOnly;
-            }
-
-            // 3. Ensure required columns exist (safe to run repeatedly)
-            // $alterStatements = [
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `code` varchar(20) DEFAULT NULL AFTER `name`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `towers` int(11) DEFAULT 1 AFTER `pincode`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `total_flats` int(11) DEFAULT 0 AFTER `towers`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `admin_id` int(11) DEFAULT NULL AFTER `total_flats`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `gst` varchar(20) DEFAULT NULL AFTER `admin_id`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `pan` varchar(20) DEFAULT NULL AFTER `gst`",
-            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL AFTER `pan`",
-            // ];
-            // foreach ($alterStatements as $sql) {
-            //     try { $this->db->exec($sql); } catch (Exception $e) {}
-            // }
-
-            // $this->beginTransaction();
-
-            // 4. Create Society
+            $normalizedPhone = $this->normalizePhone($lead['contact_phone']);
             $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
+
+            $this->beginTransaction();
+
+            // Create society
             $societyId = $this->insert('societies', [
                 'name'            => $lead['society_name'],
                 'code'            => $code,
-                'address'         => $lead['address'] ?? '',
+                'address'         => $lead['address']     ?? '',
                 'city'            => $lead['city'],
-                'state'           => $lead['state'] ?? '',
+                'state'           => $lead['state']       ?? '',
                 'country'         => 'India',
-                'pincode'         => $lead['pincode'] ?? '',
+                'pincode'         => $lead['pincode']     ?? '',
                 'contact_person'  => $lead['contact_name'],
                 'contact_phone'   => $normalizedPhone,
                 'contact_email'   => $lead['contact_email'],
                 'plan'            => 'starter',
-                'towers'          => $lead['towers'] ?? 1,
+                'towers'          => $lead['towers']      ?? 1,
                 'total_flats'     => $lead['total_flats'] ?? 0,
-                'gst'             => $lead['gst'] ?: null,
-                'pan'             => $lead['pan'] ?: null,
+                'gst'             => $lead['gst']         ?: null,
+                'pan'             => $lead['pan']         ?: null,
                 'registration_id' => (int)$id,
-                'status'          => 'approved'
+                'status'          => 'approved',
             ]);
 
-            // 5. Create or reuse Admin User
-            //    The contact email may already exist in users (e.g. re-approval after delete).
-            //    If so, update that user to link to this society instead of failing.
+            // Create or reuse admin user
             $password = 'Admin@' . rand(1000, 9999);
             $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
             $stmt->execute([$lead['contact_email'], $normalizedPhone]);
             $existingUser = $stmt->fetch();
 
             if ($existingUser) {
-                // Reuse existing user — update role, society link, and reset password
                 $adminId = $existingUser['id'];
                 $this->update('users', [
                     'role'       => 'admin',
                     'society_id' => $societyId,
                     'password'   => password_hash($password, PASSWORD_DEFAULT),
-                    'status'     => 'active'
+                    'status'     => 'active',
                 ], 'id = :id', ['id' => $adminId]);
             } else {
-                // Create fresh admin user
-                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                 $appUserId = AppUserIdHelper::generateUnique($this->db);
                 $adminId = $this->insert('users', [
                     'app_user_id' => $appUserId,
                     'name'        => $lead['contact_name'],
                     'email'       => $lead['contact_email'],
                     'phone'       => $normalizedPhone,
-                    'password'    => $hashedPassword,
+                    'password'    => password_hash($password, PASSWORD_DEFAULT),
                     'role'        => 'admin',
                     'society_id'  => $societyId,
-                    'status'      => 'active'
+                    'status'      => 'active',
                 ]);
             }
 
-            // 6. Link Admin to Society
+            // Link admin to society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // 7. Delete the registration lead — data now lives in societies table
-            $this->delete('society_registrations', 'id = ?', [(int)$id]);
+            // Mark registration approved (keep row for audit + future sync)
+            $this->update('society_registrations', [
+                'status'      => 'approved',
+                'reviewed_at' => date('Y-m-d H:i:s'),
+            ], 'id = :id', ['id' => $id]);
 
             $this->commit();
 
@@ -214,9 +375,8 @@ class SuperAdminController extends BaseController
                 'code'         => $code,
                 'admin_email'  => $lead['contact_email'],
                 'admin_phone'  => $normalizedPhone,
-                'password'     => $password
+                'password'     => $password,
             ]);
-
         } catch (Exception $e) {
             $this->rollback();
             error_log("Approve lead error: " . $e->getMessage());
@@ -224,227 +384,25 @@ class SuperAdminController extends BaseController
         }
     }
 
-    public function createRegistration()
-    {
-        try {
-            // Public endpoint
-            $data = json_decode(file_get_contents("php://input"), true);
-            
-            $errors = $this->validateRequiredFields($data, ['societyName', 'city', 'contactName', 'contactEmail', 'contactPhone']);
-            if (!empty($errors)) {
-                Response::validationError($errors);
-            }
-            
-            $id = $this->insert('society_registrations', [
-                'society_name' => $data['societyName'],
-                'address' => $data['address'] ?? '',
-                'city' => $data['city'],
-                'state' => $data['state'] ?? '',
-                'pincode' => $data['pincode'] ?? '',
-                'towers' => $data['towers'] ?? 1,
-                'total_flats' => $data['totalFlats'] ?? 10,
-                'contact_name' => $data['contactName'],
-                'contact_email' => $data['contactEmail'],
-                'contact_phone' => $data['contactPhone'],
-                'gst' => $data['gst'] ?? null,
-                'pan' => $data['pan'] ?? null,
-                'message' => $data['message'] ?? null,
-                'status' => 'pending'
-            ]);
-            
-            Response::success("Registration submitted successfully. Our team will review and contact you shortly.", ['id' => $id], 201);
-        } catch (Exception $e) {
-            Response::error("Failed to create registration: " . $e->getMessage(), 500);
-        }
-    }
-
-    public function updateRegistration($id)
-    {
-        try {
-            $user = $this->auth->authorize('super_admin');
-            $data = json_decode(file_get_contents("php://input"), true);
-            
-            $updateData = [];
-            if (isset($data['status'])) $updateData['status'] = $data['status'];
-            if (isset($data['reviewedBy'])) $updateData['reviewed_by'] = $data['reviewedBy'];
-            if (isset($data['rejectionReason'])) $updateData['rejection_reason'] = $data['rejectionReason'];
-            
-            if (!empty($updateData)) {
-                $updateData['reviewed_at'] = date('Y-m-d H:i:s');
-                $this->update('society_registrations', $updateData, 'id = :id', ['id' => $id]);
-
-                // If a society row already exists linked to this registration, sync its status too
-                if (isset($data['status'])) {
-                    $statusMap = [
-                        'under_review' => 'pending',
-                        'rejected'     => 'rejected',
-                        'pending'      => 'pending',
-                    ];
-                    $societyStatus = $statusMap[$data['status']] ?? null;
-                    if ($societyStatus) {
-                        try {
-                            $this->update('societies',
-                                ['status' => $societyStatus],
-                                'registration_id = :rid',
-                                ['rid' => $id]
-                            );
-                        } catch (Exception $e) { /* column may not exist yet */ }
-                    }
-                }
-            }
-            
-            Response::success("Registration updated");
-        } catch (Exception $e) {
-            Response::error("Failed to update registration: " . $e->getMessage(), 500);
-        }
-    }
-    
-    public function createSociety()
-    {
-        try {
-            // Only super admins can create societies
-            $user = $this->auth->authorize('super_admin');
-
-            $data = json_decode(file_get_contents("php://input"), true);
-
-            // Validation: Required fields
-            $errors = $this->validateRequiredFields($data, ['name', 'address']);
-            if (!empty($errors)) {
-                Response::validationError($errors);
-            }
-
-            // Validate plan if provided
-            if (isset($data['plan'])) {
-                $allowedPlans = ['starter', 'professional', 'enterprise'];
-                if (!in_array($data['plan'], $allowedPlans)) {
-                    Response::error("Invalid plan. Allowed values: " . implode(', ', $allowedPlans));
-                }
-            }
-            $plan = $data['plan'] ?? 'starter'; // Default to starter
-
-            // Check if society with same name already exists
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
-            $stmt->execute([$data['name']]);
-            if ($stmt->fetch()) {
-                Response::error("A society with this name already exists", 409);
-            }
-
-            // Validate and normalize contact_phone
-            $normalizedPhone = null;
-            $phoneInput = $data['contact_phone'] ?? $data['contactPhone'] ?? null;
-            if (!empty($phoneInput)) {
-                $originalPhone = trim($phoneInput);
-                $cleanPhone = preg_replace('/[^\d+]/', '', $originalPhone);
-
-                if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
-                    if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
-                        $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
-                    } else {
-                        if (substr($originalPhone, 0, 1) !== '+') {
-                            Response::error("International phone numbers must start with country code (e.g., +1, +44)");
-                        }
-                    }
-                }
-
-                $digitsOnly = ltrim($cleanPhone, '+');
-                if (!preg_match('/^\d{8,15}$/', $digitsOnly)) {
-                    Response::error("Phone number must have 8 to 15 digits after country code");
-                }
-
-                $normalizedPhone = '+' . $digitsOnly;
-                $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_phone = ?");
-                $stmt->execute([$normalizedPhone]);
-                if ($stmt->fetch()) {
-                    Response::error("A society with this contact phone already exists", 409);
-                }
-            }
-
-            // Email validation and uniqueness
-            $emailInput = $data['contact_email'] ?? $data['contactEmail'] ?? null;
-            if (!empty($emailInput)) {
-                if (!filter_var($emailInput, FILTER_VALIDATE_EMAIL)) {
-                    Response::error("Invalid email format");
-                }
-                $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_email = ?");
-                $stmt->execute([$emailInput]);
-                if ($stmt->fetch()) {
-                    Response::error("A society with this contact email already exists", 409);
-                }
-            }
-
-            // Pincode validation
-            if (!empty($data['pincode'])) {
-                if (strlen($data['pincode']) > 12 || !preg_match('/^[A-Za-z0-9\s-]+$/', $data['pincode'])) {
-                    Response::error("Invalid pincode/postal code format");
-                }
-            }
-
-            // Insert society — store normalized phone (mirrors AdminController::createSociety exactly)
-            $societyId = $this->insert('societies', [
-                'name'           => $data['name'],
-                'address'        => $data['address'],
-                'city'           => $data['city'] ?? '',
-                'state'          => $data['state'] ?? '',
-                'country'        => $data['country'] ?? '',
-                'pincode'        => $data['pincode'] ?? '',
-                'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
-                'contact_phone'  => $normalizedPhone,
-                'contact_email'  => $emailInput ?? '',
-                'plan'           => $plan,
-                'status'         => 'approved' // Super admin creates approved societies
-            ]);
-
-            // Extension for Super Admin: Update registration status if provided
-            $regId = $data['registration_id'] ?? $data['registrationId'] ?? null;
-            if ($regId) {
-                $this->update('society_registrations', [
-                    'status'      => 'approved',
-                    'reviewed_at' => date('Y-m-d H:i:s')
-                ], 'id = :id', ['id' => $regId]);
-            }
-
-            Response::success("Society created successfully", ['society_id' => $societyId], 201);
-
-        } catch (Exception $e) {
-            Response::error("Failed to create society: " . $e->getMessage(), 500);
-        }
-    }
+    // ─── SOCIETIES ──────────────────────────────────────────────────────────
 
     public function getSocieties()
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-            
-            $query = "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode, 
-                             s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail, 
-                             s.plan, s.created_at as createdAt";
-            
-            // Check if status, code, total_flats, towers, admin_id columns exist and select them
-            try {
-                $stmt = $this->db->query("SELECT status, code, total_flats, towers, admin_id FROM societies LIMIT 1");
-                $query = "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode, 
-                                 s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail, 
-                                 s.plan, s.created_at as createdAt, 
-                                 s.status, s.code, s.total_flats as totalFlats, s.towers, s.admin_id as adminId
-                          FROM societies s ORDER BY s.created_at DESC";
-            } catch (Exception $e) {
-                // columns don't exist
-                $query .= " FROM societies s ORDER BY s.created_at DESC";
-            }
-            
-            $stmt = $this->db->query($query);
-            $societies = $stmt->fetchAll();
-            
-            // Add defaults for missing fields if not in DB
-            foreach ($societies as &$soc) {
-                if (!isset($soc['status'])) $soc['status'] = 'approved';
-                if (!isset($soc['code'])) $soc['code'] = strtoupper(substr($soc['name'], 0, 4)) . rand(100,999);
-                if (!isset($soc['totalFlats'])) $soc['totalFlats'] = 0;
-                if (!isset($soc['towers'])) $soc['towers'] = 1;
-                if (!isset($soc['adminId'])) $soc['adminId'] = null;
-            }
-            
-            Response::success("Societies retrieved", $societies);
+            $this->auth->authorize('super_admin');
+            $stmt = $this->db->query(
+                "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode,
+                        s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail,
+                        s.plan, s.created_at as createdAt,
+                        COALESCE(s.status,'approved') as status,
+                        COALESCE(s.code,'') as code,
+                        COALESCE(s.total_flats,0) as totalFlats,
+                        COALESCE(s.towers,1) as towers,
+                        s.admin_id as adminId,
+                        s.registration_id as registrationId
+                 FROM societies s ORDER BY s.created_at DESC"
+            );
+            Response::success("Societies retrieved", $stmt->fetchAll());
         } catch (Exception $e) {
             Response::error("Failed to retrieve societies: " . $e->getMessage(), 500);
         }
@@ -453,114 +411,142 @@ class SuperAdminController extends BaseController
     public function getSocietyById($id)
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-            
-            $query = "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode, 
-                             s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail, 
-                             s.plan, s.created_at as createdAt";
-            
-            try {
-                $stmt = $this->db->query("SELECT status, code, total_flats, towers, admin_id FROM societies LIMIT 1");
-                $query = "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode, 
-                                 s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail, 
-                                 s.plan, s.created_at as createdAt, 
-                                 s.status, s.code, s.total_flats as totalFlats, s.towers, s.admin_id as adminId
-                          FROM societies s WHERE s.id = ?";
-            } catch (Exception $e) {
-                $query .= " FROM societies s WHERE s.id = ?";
-            }
-            
-            $stmt = $this->db->prepare($query);
+            $this->auth->authorize('super_admin');
+            $stmt = $this->db->prepare(
+                "SELECT s.id, s.name, s.address, s.city, s.state, s.country, s.pincode,
+                        s.contact_person as contactName, s.contact_phone as contactPhone, s.contact_email as contactEmail,
+                        s.plan, s.created_at as createdAt,
+                        COALESCE(s.status,'approved') as status,
+                        COALESCE(s.code,'') as code,
+                        COALESCE(s.total_flats,0) as totalFlats,
+                        COALESCE(s.towers,1) as towers,
+                        s.admin_id as adminId,
+                        s.registration_id as registrationId,
+                        s.gst, s.pan
+                 FROM societies s WHERE s.id = ?"
+            );
             $stmt->execute([$id]);
             $soc = $stmt->fetch();
-            
-            if (!$soc) {
-                Response::notFound("Society not found");
-            }
-            
-            if (!isset($soc['status'])) $soc['status'] = 'approved';
-            if (!isset($soc['code'])) $soc['code'] = strtoupper(substr($soc['name'], 0, 4)) . rand(100,999);
-            if (!isset($soc['totalFlats'])) $soc['totalFlats'] = 0;
-            if (!isset($soc['towers'])) $soc['towers'] = 1;
-            if (!isset($soc['adminId'])) $soc['adminId'] = null;
-            
-            // Get user count
-            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM users WHERE society_id = ?");
-            $stmt->execute([$id]);
-            $soc['userCount'] = $stmt->fetch()['count'];
-            
-            // Get admin
+            if (!$soc) Response::notFound("Society not found");
+
+            // User count
+            $stmt2 = $this->db->prepare("SELECT COUNT(*) as count FROM users WHERE society_id = ?");
+            $stmt2->execute([$id]);
+            $soc['userCount'] = $stmt2->fetch()['count'];
+
+            // Admin info
             $soc['admin'] = null;
-            if ($soc['adminId']) {
-                $stmt = $this->db->prepare("SELECT id, name, email, phone, role FROM users WHERE id = ?");
-                $stmt->execute([$soc['adminId']]);
-                $soc['admin'] = $stmt->fetch() ?: null;
-            } else {
-                // Try to find the first admin if adminId is not set
-                $stmt = $this->db->prepare("SELECT id, name, email, phone, role FROM users WHERE society_id = ? AND role = 'admin' LIMIT 1");
-                $stmt->execute([$id]);
-                $soc['admin'] = $stmt->fetch() ?: null;
-                if ($soc['admin']) {
-                    $soc['adminId'] = $soc['admin']['id'];
-                }
+            $adminId = $soc['adminId'];
+            if ($adminId) {
+                $stmt3 = $this->db->prepare("SELECT id, name, email, phone, role FROM users WHERE id = ?");
+                $stmt3->execute([$adminId]);
+                $soc['admin'] = $stmt3->fetch() ?: null;
             }
-            
+            if (!$soc['admin']) {
+                $stmt3 = $this->db->prepare("SELECT id, name, email, phone, role FROM users WHERE society_id = ? AND role = 'admin' LIMIT 1");
+                $stmt3->execute([$id]);
+                $soc['admin'] = $stmt3->fetch() ?: null;
+                if ($soc['admin']) $soc['adminId'] = $soc['admin']['id'];
+            }
+
             Response::success("Society retrieved", $soc);
         } catch (Exception $e) {
             Response::error("Failed to retrieve society: " . $e->getMessage(), 500);
         }
     }
 
-    public function createSocietyAdmin($societyId)
+    /** Create a society directly (super admin, not from a registration lead). */
+    public function createSociety()
     {
         try {
-            $user = $this->auth->authorize('super_admin');
+            $this->auth->authorize('super_admin');
             $data = json_decode(file_get_contents("php://input"), true);
-            
-            $errors = $this->validateRequiredFields($data, ['name', 'email', 'phone', 'password']);
+
+            $errors = $this->validateRequiredFields($data, ['name','address','city']);
             if (!empty($errors)) Response::validationError($errors);
-            
-            // Check email
-            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
-            $stmt->execute([$data['email'], $data['phone']]);
-            if ($stmt->fetch()) Response::error("User with this email or phone already exists", 409);
-            
-            $userId = $this->insert('users', [
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'phone' => $data['phone'],
-                'password' => password_hash($data['password'], PASSWORD_DEFAULT),
-                'role' => 'admin',
-                'society_id' => $societyId,
-                'status' => 'active'
+
+            $allowedPlans = ['starter','professional','enterprise'];
+            $plan = isset($data['plan']) && in_array($data['plan'], $allowedPlans) ? $data['plan'] : 'starter';
+
+            // Duplicate name check
+            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
+            $stmt->execute([$data['name']]);
+            if ($stmt->fetch()) Response::error("A society with this name already exists", 409);
+
+            $phoneInput = $data['contact_phone'] ?? $data['contactPhone'] ?? null;
+            $normalizedPhone = $phoneInput ? $this->normalizePhone($phoneInput) : null;
+            $emailInput = $data['contact_email'] ?? $data['contactEmail'] ?? null;
+
+            $this->ensureSocietyColumns();
+            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $data['name']), 0, 4)) . rand(100, 999);
+
+            $societyId = $this->insert('societies', [
+                'name'           => $data['name'],
+                'code'           => $code,
+                'address'        => $data['address'],
+                'city'           => $data['city']          ?? '',
+                'state'          => $data['state']         ?? '',
+                'country'        => $data['country']       ?? 'India',
+                'pincode'        => $data['pincode']       ?? '',
+                'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
+                'contact_phone'  => $normalizedPhone,
+                'contact_email'  => $emailInput            ?? '',
+                'plan'           => $plan,
+                'status'         => 'approved',
             ]);
-            
-            try {
-                // Update society admin_id and status
-                $this->update('societies', ['admin_id' => $userId, 'status' => 'approved'], 'id = :id', ['id' => $societyId]);
-            } catch (Exception $e) {}
-            
-            Response::success("Admin created", ['user_id' => $userId], 201);
-            
+
+            // If created from a registration, mark that registration approved
+            $regId = $data['registration_id'] ?? $data['registrationId'] ?? null;
+            if ($regId) {
+                $this->update('society_registrations', [
+                    'status'      => 'approved',
+                    'reviewed_at' => date('Y-m-d H:i:s'),
+                ], 'id = :id', ['id' => $regId]);
+                // Link back
+                $this->update('societies', ['registration_id' => (int)$regId], 'id = :id', ['id' => $societyId]);
+            }
+
+            Response::success("Society created successfully", ['society_id' => $societyId, 'code' => $code], 201);
         } catch (Exception $e) {
-            Response::error("Failed to create admin: " . $e->getMessage(), 500);
+            Response::error("Failed to create society: " . $e->getMessage(), 500);
         }
     }
-    
+
+    /** Update society fields. Syncs all changes to linked registration row. */
+    public function updateSociety($id)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+            $data = json_decode(file_get_contents("php://input"), true);
+
+            $allowed = ['name','address','city','state','country','pincode',
+                        'contact_person','contact_phone','contact_email',
+                        'plan','status','towers','total_flats','gst','pan'];
+            $updateData = [];
+            foreach ($allowed as $col) {
+                $camel = lcfirst(str_replace('_', '', ucwords($col, '_')));
+                if (array_key_exists($col, $data))   $updateData[$col] = $data[$col];
+                elseif (array_key_exists($camel, $data)) $updateData[$col] = $data[$camel];
+            }
+            if (empty($updateData)) Response::error("No valid fields provided", 400);
+
+            $this->update('societies', $updateData, 'id = :id', ['id' => $id]);
+
+            // Sync to registration
+            $this->syncSocietyToReg((int)$id);
+
+            Response::success("Society updated successfully");
+        } catch (Exception $e) {
+            Response::error("Failed to update society: " . $e->getMessage(), 500);
+        }
+    }
+
     public function approveSociety($societyId)
     {
         try {
-            $user = $this->auth->authorize('super_admin');
+            $this->auth->authorize('super_admin');
             $this->update('societies', ['status' => 'approved'], 'id = :id', ['id' => $societyId]);
-            // Sync back to registration if this society came from a lead
-            try {
-                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
-                $stmt->execute([$societyId]);
-                $row = $stmt->fetch();
-                if (!empty($row['registration_id'])) {
-                    // Registration was deleted on approval — nothing to sync back
-                }
-            } catch (Exception $e) {}
+            $this->syncSocietyToReg((int)$societyId);
             Response::success("Society approved");
         } catch (Exception $e) {
             Response::error("Failed to approve society: " . $e->getMessage(), 500);
@@ -570,170 +556,132 @@ class SuperAdminController extends BaseController
     public function suspendSociety($societyId)
     {
         try {
-            $user = $this->auth->authorize('super_admin');
+            $this->auth->authorize('super_admin');
             $this->update('societies', ['status' => 'suspended'], 'id = :id', ['id' => $societyId]);
-            // Sync status back to registration if still present
-            try {
-                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
-                $stmt->execute([$societyId]);
-                $row = $stmt->fetch();
-                if (!empty($row['registration_id'])) {
-                    $this->update('society_registrations',
-                        ['status' => 'rejected', 'reviewed_at' => date('Y-m-d H:i:s')],
-                        'id = :id', ['id' => $row['registration_id']]
-                    );
-                }
-            } catch (Exception $e) {}
+            $this->syncSocietyToReg((int)$societyId);
             Response::success("Society suspended");
         } catch (Exception $e) {
             Response::error("Failed to suspend society: " . $e->getMessage(), 500);
         }
     }
 
-    public function toggleAdmin($id)
+    public function deleteSociety($id)
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-            
-            $stmt = $this->db->prepare("SELECT id, status FROM users WHERE id = ? AND role = 'admin'");
+            $this->auth->authorize('super_admin');
+            $stmt = $this->db->prepare("SELECT id, registration_id FROM societies WHERE id = ?");
             $stmt->execute([$id]);
-            $admin = $stmt->fetch();
-            
-            if (!$admin) {
-                Response::notFound("Admin not found");
+            $soc = $stmt->fetch();
+            if (!$soc) Response::notFound("Society not found");
+
+            $this->delete('societies', 'id = ?', [$id]);
+
+            // If linked to a registration, revert it to under_review so it can be re-processed
+            if (!empty($soc['registration_id'])) {
+                try {
+                    $this->update('society_registrations', [
+                        'status'      => 'under_review',
+                        'reviewed_at' => date('Y-m-d H:i:s'),
+                    ], 'id = :id', ['id' => $soc['registration_id']]);
+                } catch (Exception $e) {}
             }
-            
-            $newStatus = ($admin['status'] === 'active') ? 'inactive' : 'active';
-            $this->update('users', ['status' => $newStatus], 'id = :id', ['id' => $id]);
-            
-            Response::success("Admin status updated", ['id' => $id, 'status' => $newStatus, 'isActive' => ($newStatus === 'active')]);
+
+            Response::success("Society deleted successfully");
         } catch (Exception $e) {
-            Response::error("Failed to toggle admin: " . $e->getMessage(), 500);
+            Response::error("Failed to delete society: " . $e->getMessage(), 500);
+        }
+    }
+
+    // ─── ADMINS ─────────────────────────────────────────────────────────────
+
+    public function createSocietyAdmin($societyId)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+            $data = json_decode(file_get_contents("php://input"), true);
+
+            $errors = $this->validateRequiredFields($data, ['name','email','phone','password']);
+            if (!empty($errors)) Response::validationError($errors);
+
+            // Duplicate check
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
+            $stmt->execute([$data['email'], $data['phone']]);
+            if ($stmt->fetch()) Response::error("User with this email or phone already exists", 409);
+
+            $userId = $this->insert('users', [
+                'name'       => $data['name'],
+                'email'      => $data['email'],
+                'phone'      => $data['phone'],
+                'password'   => password_hash($data['password'], PASSWORD_DEFAULT),
+                'role'       => 'admin',
+                'society_id' => $societyId,
+                'status'     => 'active',
+            ]);
+
+            // Link admin to society
+            $this->update('societies', ['admin_id' => $userId, 'status' => 'approved'], 'id = :id', ['id' => $societyId]);
+
+            Response::success("Admin created", ['user_id' => $userId], 201);
+        } catch (Exception $e) {
+            Response::error("Failed to create admin: " . $e->getMessage(), 500);
         }
     }
 
     public function getAdmins()
     {
         try {
-            $user = $this->auth->authorize('super_admin');
-            
-            $query = "SELECT u.id, u.name, u.email, u.phone, u.role, u.society_id as societyId, u.status, u.created_at as createdAt 
-                      FROM users u WHERE u.role = 'admin' ORDER BY u.created_at DESC";
-            
-            $stmt = $this->db->query($query);
+            $this->auth->authorize('super_admin');
+            $stmt = $this->db->query(
+                "SELECT u.id, u.name, u.email, u.phone, u.role, u.society_id as societyId, u.status, u.created_at as createdAt
+                 FROM users u WHERE u.role = 'admin' ORDER BY u.created_at DESC"
+            );
             $admins = $stmt->fetchAll();
-            
+
             foreach ($admins as &$admin) {
                 $admin['isActive'] = ($admin['status'] === 'active');
-                
-                // Get society info
+                $admin['society'] = null;
                 if ($admin['societyId']) {
                     try {
-                        $stmt = $this->db->prepare("SELECT id, name, code, status FROM societies WHERE id = ?");
-                        $stmt->execute([$admin['societyId']]);
-                        $admin['society'] = $stmt->fetch() ?: null;
+                        $stmt2 = $this->db->prepare("SELECT id, name, code, status FROM societies WHERE id = ?");
+                        $stmt2->execute([$admin['societyId']]);
+                        $admin['society'] = $stmt2->fetch() ?: null;
                     } catch (Exception $e) {
-                        $stmt = $this->db->prepare("SELECT id, name FROM societies WHERE id = ?");
-                        $stmt->execute([$admin['societyId']]);
-                        $admin['society'] = $stmt->fetch() ?: null;
+                        $stmt2 = $this->db->prepare("SELECT id, name FROM societies WHERE id = ?");
+                        $stmt2->execute([$admin['societyId']]);
+                        $admin['society'] = $stmt2->fetch() ?: null;
                         if ($admin['society']) {
                             $admin['society']['code'] = 'N/A';
                             $admin['society']['status'] = 'approved';
                         }
                     }
-                } else {
-                    $admin['society'] = null;
                 }
             }
-            
+
             Response::success("Admins retrieved", $admins);
         } catch (Exception $e) {
             Response::error("Failed to retrieve admins: " . $e->getMessage(), 500);
         }
     }
 
-    public function updateSociety($id)
+    public function toggleAdmin($id)
     {
         try {
             $this->auth->authorize('super_admin');
-            $data = json_decode(file_get_contents("php://input"), true);
-
-            // Build update payload for societies
-            $allowed = [
-                'name', 'address', 'city', 'state', 'country', 'pincode',
-                'contact_person', 'contact_phone', 'contact_email',
-                'plan', 'status', 'towers', 'total_flats', 'gst', 'pan'
-            ];
-            $updateData = [];
-            foreach ($allowed as $col) {
-                $camel = lcfirst(str_replace('_', '', ucwords($col, '_')));
-                if (isset($data[$col]))   $updateData[$col] = $data[$col];
-                elseif (isset($data[$camel])) $updateData[$col] = $data[$camel];
-            }
-
-            if (empty($updateData)) {
-                Response::error("No valid fields provided", 400);
-            }
-
-            $this->update('societies', $updateData, 'id = :id', ['id' => $id]);
-
-            // Sync matching fields back to society_registrations if linked
-            try {
-                $stmt = $this->db->prepare("SELECT registration_id FROM societies WHERE id = ?");
-                $stmt->execute([$id]);
-                $row = $stmt->fetch();
-                if (!empty($row['registration_id'])) {
-                    $regSync = [];
-                    $fieldMap = [
-                        'name'            => 'society_name',
-                        'address'         => 'address',
-                        'city'            => 'city',
-                        'state'           => 'state',
-                        'pincode'         => 'pincode',
-                        'contact_person'  => 'contact_name',
-                        'contact_phone'   => 'contact_phone',
-                        'contact_email'   => 'contact_email',
-                        'towers'          => 'towers',
-                        'total_flats'     => 'total_flats',
-                        'gst'             => 'gst',
-                        'pan'             => 'pan',
-                    ];
-                    foreach ($fieldMap as $socCol => $regCol) {
-                        if (isset($updateData[$socCol])) {
-                            $regSync[$regCol] = $updateData[$socCol];
-                        }
-                    }
-                    if (!empty($regSync)) {
-                        $this->update('society_registrations', $regSync,
-                            'id = :id', ['id' => $row['registration_id']]);
-                    }
-                }
-            } catch (Exception $e) { /* registration may not exist */ }
-
-            Response::success("Society updated successfully");
-        } catch (Exception $e) {
-            Response::error("Failed to update society: " . $e->getMessage(), 500);
-        }
-    }
-
-    public function deleteSociety($id)
-    {
-        try {
-            $user = $this->auth->authorize('super_admin');
-            
-            // Fetch society to get registration_id before deleting
-            $stmt = $this->db->prepare("SELECT id, registration_id FROM societies WHERE id = ?");
+            $stmt = $this->db->prepare("SELECT id, status FROM users WHERE id = ? AND role = 'admin'");
             $stmt->execute([$id]);
-            $society = $stmt->fetch();
-            if (!$society) {
-                Response::notFound("Society not found");
-            }
+            $admin = $stmt->fetch();
+            if (!$admin) Response::notFound("Admin not found");
 
-            $this->delete('societies', 'id = ?', [$id]);
+            $newStatus = ($admin['status'] === 'active') ? 'inactive' : 'active';
+            $this->update('users', ['status' => $newStatus], 'id = :id', ['id' => $id]);
 
-            Response::success("Society deleted successfully");
+            Response::success("Admin status updated", [
+                'id'       => $id,
+                'status'   => $newStatus,
+                'isActive' => ($newStatus === 'active'),
+            ]);
         } catch (Exception $e) {
-            Response::error("Failed to delete society: " . $e->getMessage(), 500);
+            Response::error("Failed to toggle admin: " . $e->getMessage(), 500);
         }
     }
 }
