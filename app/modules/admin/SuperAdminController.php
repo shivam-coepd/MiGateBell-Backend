@@ -112,7 +112,6 @@ class SuperAdminController extends BaseController
             $stmt = $this->db->prepare("SELECT * FROM society_registrations WHERE id = ?");
             $stmt->execute([$id]);
             $lead = $stmt->fetch();
-
             if (!$lead) {
                 Response::notFound("Registration lead not found");
             }
@@ -130,9 +129,24 @@ class SuperAdminController extends BaseController
                 $normalizedPhone = '+' . $digitsOnly;
             }
 
-            // 3. Create Society (with all fields from the registration)
-            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
+            // 3. Ensure required columns exist (safe to run repeatedly)
+            // $alterStatements = [
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `code` varchar(20) DEFAULT NULL AFTER `name`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `towers` int(11) DEFAULT 1 AFTER `pincode`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `total_flats` int(11) DEFAULT 0 AFTER `towers`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `admin_id` int(11) DEFAULT NULL AFTER `total_flats`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `gst` varchar(20) DEFAULT NULL AFTER `admin_id`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `pan` varchar(20) DEFAULT NULL AFTER `gst`",
+            //     "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL AFTER `pan`",
+            // ];
+            // foreach ($alterStatements as $sql) {
+            //     try { $this->db->exec($sql); } catch (Exception $e) {}
+            // }
 
+            // $this->beginTransaction();
+
+            // 4. Create Society
+            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
             $societyId = $this->insert('societies', [
                 'name'            => $lead['society_name'],
                 'code'            => $code,
@@ -153,26 +167,43 @@ class SuperAdminController extends BaseController
                 'status'          => 'approved'
             ]);
 
-            // 4. Create Admin User
+            // 5. Create or reuse Admin User
+            //    The contact email may already exist in users (e.g. re-approval after delete).
+            //    If so, update that user to link to this society instead of failing.
             $password = 'Admin@' . rand(1000, 9999);
-            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $appUserId = AppUserIdHelper::generateUnique($this->db);
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
+            $stmt->execute([$lead['contact_email'], $normalizedPhone]);
+            $existingUser = $stmt->fetch();
 
-            $adminId = $this->insert('users', [
-                'app_user_id' => $appUserId,
-                'name'        => $lead['contact_name'],
-                'email'       => $lead['contact_email'],
-                'phone'       => $normalizedPhone,
-                'password'    => $hashedPassword,
-                'role'        => 'admin',
-                'society_id'  => $societyId,
-                'status'      => 'active'
-            ]);
+            if ($existingUser) {
+                // Reuse existing user — update role, society link, and reset password
+                $adminId = $existingUser['id'];
+                $this->update('users', [
+                    'role'       => 'admin',
+                    'society_id' => $societyId,
+                    'password'   => password_hash($password, PASSWORD_DEFAULT),
+                    'status'     => 'active'
+                ], 'id = :id', ['id' => $adminId]);
+            } else {
+                // Create fresh admin user
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                $appUserId = AppUserIdHelper::generateUnique($this->db);
+                $adminId = $this->insert('users', [
+                    'app_user_id' => $appUserId,
+                    'name'        => $lead['contact_name'],
+                    'email'       => $lead['contact_email'],
+                    'phone'       => $normalizedPhone,
+                    'password'    => $hashedPassword,
+                    'role'        => 'admin',
+                    'society_id'  => $societyId,
+                    'status'      => 'active'
+                ]);
+            }
 
-            // 5. Link Admin to Society
+            // 6. Link Admin to Society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // 6. Delete the registration lead — it now lives in the societies table
+            // 7. Delete the registration lead — data now lives in societies table
             $this->delete('society_registrations', 'id = ?', [(int)$id]);
 
             $this->commit();
