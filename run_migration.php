@@ -48,11 +48,10 @@ $statements = [
         COMMENT 'Source society_registrations.id — set when approved from a lead' AFTER `pan`",
 
     // Unique constraint — one society per registration, prevents duplicate approvals at DB level
-    "ALTER TABLE `societies` ADD CONSTRAINT IF NOT EXISTS `uq_societies_registration_id` UNIQUE (`registration_id`)",
+    "ALTER TABLE `societies` ADD UNIQUE KEY `uq_societies_registration_id` (`registration_id`)",
 
-    // Fix status enum to include 'approved'
-    "ALTER TABLE `society_registrations`
-        MODIFY COLUMN IF EXISTS `status` enum('pending','new','under_review','approved','rejected') DEFAULT 'new'",
+    // Fix status enum to include 'approved' — use try/catch since MODIFY IF EXISTS isn't valid MySQL
+    // This runs after CREATE TABLE so it handles both new and existing tables
 
     // ── society_registrations table: create if not exists ─────────────────
 
@@ -72,7 +71,7 @@ $statements = [
         `gst`              varchar(20)  DEFAULT NULL,
         `pan`              varchar(20)  DEFAULT NULL,
         `message`          text         DEFAULT NULL,
-        `status`           enum('pending','new','under_review','rejected') DEFAULT 'new',
+        `status`           enum('pending','new','under_review','approved','rejected') DEFAULT 'new',
         `reviewed_by`      int(11)      DEFAULT NULL,
         `reviewed_at`      timestamp    NULL DEFAULT NULL,
         `rejection_reason` text         DEFAULT NULL,
@@ -80,6 +79,10 @@ $statements = [
         `updated_at`       timestamp    NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+    // Ensure status enum includes 'approved' on existing tables
+    "ALTER TABLE `society_registrations`
+        MODIFY COLUMN `status` enum('pending','new','under_review','approved','rejected') DEFAULT 'new'",
 ];
 
 foreach ($statements as $sql) {

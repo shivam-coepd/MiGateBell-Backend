@@ -26,15 +26,15 @@ class SuperAdminController extends BaseController
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `admin_id` int(11) DEFAULT NULL AFTER `total_flats`",
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `gst` varchar(20) DEFAULT NULL AFTER `admin_id`",
             "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `pan` varchar(20) DEFAULT NULL AFTER `gst`",
-            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL COMMENT 'FK to society_registrations.id — unique, one society per registration'",
-
-    // Unique constraint — prevents duplicate societies for the same registration at DB level
-    // Ignore error if constraint already exists
-    "ALTER TABLE `societies` ADD CONSTRAINT IF NOT EXISTS `uq_societies_registration_id` UNIQUE (`registration_id`)",
+            "ALTER TABLE `societies` ADD COLUMN IF NOT EXISTS `registration_id` int(11) DEFAULT NULL AFTER `pan`",
         ];
         foreach ($alters as $sql) {
             try { $this->db->exec($sql); } catch (Exception $e) {}
         }
+        // Add unique constraint — silently ignore if already exists (duplicate key error 1061)
+        try {
+            $this->db->exec("ALTER TABLE `societies` ADD UNIQUE KEY `uq_societies_registration_id` (`registration_id`)");
+        } catch (Exception $e) {}
     }
 
     /**
@@ -299,40 +299,57 @@ class SuperAdminController extends BaseController
             $lead = $stmt->fetch();
             if (!$lead) Response::notFound("Registration lead not found");
 
-            // Idempotency: if a society already exists for this registration, don't create another
-            $this->ensureSocietyColumns();
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE registration_id = ?");
-            $stmt->execute([$id]);
-            $existing = $stmt->fetch();
-            if ($existing) {
-                Response::error("This registration has already been approved (society #" . $existing['id'] . " exists).", 409);
-            }
-
             $normalizedPhone = $this->normalizePhone($lead['contact_phone']);
             $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
 
+            // 1. Check for existing society by registration_id
+            $stmt = $this->db->prepare("SELECT id FROM societies WHERE registration_id = ?");
+            $stmt->execute([$id]);
+            $existingByReg = $stmt->fetch();
+            
+            // 2. ALSO check for existing society by name OR contact details (to handle manual creations)
+            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ? OR contact_email = ? OR contact_phone = ?");
+            $stmt->execute([$lead['society_name'], $lead['contact_email'], $normalizedPhone]);
+            $existingByData = $stmt->fetch();
+
+            $societyId = $existingByReg['id'] ?? $existingByData['id'] ?? null;
+            $isNewSociety = !$societyId;
+
             $this->beginTransaction();
 
-            // Create society
-            $societyId = $this->insert('societies', [
-                'name'            => $lead['society_name'],
-                'code'            => $code,
-                'address'         => $lead['address']     ?? '',
-                'city'            => $lead['city'],
-                'state'           => $lead['state']       ?? '',
-                'country'         => 'India',
-                'pincode'         => $lead['pincode']     ?? '',
-                'contact_person'  => $lead['contact_name'],
-                'contact_phone'   => $normalizedPhone,
-                'contact_email'   => $lead['contact_email'],
-                'plan'            => 'starter',
-                'towers'          => $lead['towers']      ?? 1,
-                'total_flats'     => $lead['total_flats'] ?? 0,
-                'gst'             => $lead['gst']         ?: null,
-                'pan'             => $lead['pan']         ?: null,
-                'registration_id' => (int)$id,
-                'status'          => 'approved',
-            ]);
+            if ($isNewSociety) {
+                // Create society
+                $societyId = $this->insert('societies', [
+                    'name'            => $lead['society_name'],
+                    'code'            => $code,
+                    'address'         => $lead['address']     ?? '',
+                    'city'            => $lead['city'],
+                    'state'           => $lead['state']       ?? '',
+                    'country'         => 'India',
+                    'pincode'         => $lead['pincode']     ?? '',
+                    'contact_person'  => $lead['contact_name'],
+                    'contact_phone'   => $normalizedPhone,
+                    'contact_email'   => $lead['contact_email'],
+                    'plan'            => 'starter',
+                    'towers'          => $lead['towers']      ?? 1,
+                    'total_flats'     => $lead['total_flats'] ?? 0,
+                    'gst'             => $lead['gst']         ?: null,
+                    'pan'             => $lead['pan']         ?: null,
+                    'registration_id' => (int)$id,
+                    'status'          => 'approved',
+                ]);
+            } else {
+                // Update existing society and link it to this registration
+                $this->update('societies', [
+                    'registration_id' => (int)$id,
+                    'status'          => 'approved',
+                    'contact_person'  => $lead['contact_name'],
+                    'contact_phone'   => $normalizedPhone,
+                    'contact_email'   => $lead['contact_email'],
+                    'towers'          => $lead['towers']      ?? 1,
+                    'total_flats'     => $lead['total_flats'] ?? 0,
+                ], 'id = :id', ['id' => $societyId]);
+            }
 
             // Create or reuse admin user
             $password = 'Admin@' . rand(1000, 9999);
@@ -365,11 +382,9 @@ class SuperAdminController extends BaseController
             // Link admin to society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // Mark registration approved (keep row for audit + future sync)
-            $this->update('society_registrations', [
-                'status'      => 'approved',
-                'reviewed_at' => date('Y-m-d H:i:s'),
-            ], 'id = :id', ['id' => $id]);
+            // Delete the registration lead — it now lives in the societies table
+            // (As requested to prevent duplication/confusion in the UI)
+            $this->delete('society_registrations', 'id = ?', [(int)$id]);
 
             $this->commit();
 
@@ -472,10 +487,13 @@ class SuperAdminController extends BaseController
             $allowedPlans = ['starter','professional','enterprise'];
             $plan = isset($data['plan']) && in_array($data['plan'], $allowedPlans) ? $data['plan'] : 'starter';
 
-            // Duplicate name check
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
-            $stmt->execute([$data['name']]);
-            if ($stmt->fetch()) Response::error("A society with this name already exists", 409);
+            // Duplicate check (name, email, or phone)
+            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ? OR contact_email = ? OR contact_phone = ?");
+            $stmt->execute([$data['name'], $data['contact_email'] ?? '', $data['contact_phone'] ?? '']);
+            $existing = $stmt->fetch();
+            if ($existing) {
+                Response::error("A society with this name, email, or phone already exists (#" . $existing['id'] . ")", 409);
+            }
 
             $phoneInput = $data['contact_phone'] ?? $data['contactPhone'] ?? null;
             $normalizedPhone = $phoneInput ? $this->normalizePhone($phoneInput) : null;
