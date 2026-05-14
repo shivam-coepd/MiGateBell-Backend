@@ -148,6 +148,81 @@ class SuperAdminController extends BaseController
         return preg_match('/^\d{8,15}$/', $digits) ? '+' . $digits : $phone;
     }
 
+    /**
+     * Resolve the single society row to activate for a registration lead (avoids duplicate INSERTs).
+     * Order: already linked by registration_id → unlinked / same-reg row matching email or phone or name.
+     */
+    private function findSocietyIdForRegistrationLead(int $regId, array $lead, string $normalizedPhone): ?int
+    {
+        $stmt = $this->db->prepare('SELECT id FROM societies WHERE registration_id = ? ORDER BY id ASC LIMIT 1');
+        $stmt->execute([$regId]);
+        $row = $stmt->fetch();
+        if ($row) {
+            return (int) $row['id'];
+        }
+
+        $email = trim((string) ($lead['contact_email'] ?? ''));
+        $name  = trim((string) ($lead['society_name'] ?? ''));
+        $rawPhone = trim((string) ($lead['contact_phone'] ?? ''));
+
+        $conds  = ['(registration_id IS NULL OR registration_id = ?)'];
+        $params = [$regId];
+
+        $matchParts = [];
+        if ($email !== '') {
+            $matchParts[] = 'NULLIF(TRIM(contact_email), \'\') IS NOT NULL AND contact_email = ?';
+            $params[] = $email;
+        }
+        if ($normalizedPhone !== '') {
+            $matchParts[] = 'contact_phone = ?';
+            $params[] = $normalizedPhone;
+        }
+        if ($rawPhone !== '' && $rawPhone !== $normalizedPhone) {
+            $matchParts[] = 'contact_phone = ?';
+            $params[] = $rawPhone;
+        }
+        if ($name !== '') {
+            $matchParts[] = 'name = ?';
+            $params[] = $name;
+        }
+        if (empty($matchParts)) {
+            return null;
+        }
+
+        $conds[] = '(' . implode(' OR ', $matchParts) . ')';
+        $sql = 'SELECT id FROM societies WHERE ' . implode(' AND ', $conds) . ' ORDER BY id ASC LIMIT 1';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return $row ? (int) $row['id'] : null;
+    }
+
+    /** Find society id conflicting on name / email / phone (phones compared normalized + raw). */
+    private function findDuplicateSocietyId(string $name, ?string $email, ?string $normalizedPhone, ?string $rawPhone): ?int
+    {
+        $conds  = ['name = ?'];
+        $params = [$name];
+        if ($email !== null && $email !== '') {
+            $conds[] = '(NULLIF(TRIM(contact_email), \'\') IS NOT NULL AND contact_email = ?)';
+            $params[] = $email;
+        }
+        if ($normalizedPhone !== null && $normalizedPhone !== '') {
+            $conds[] = 'contact_phone = ?';
+            $params[] = $normalizedPhone;
+        }
+        if ($rawPhone !== null && $rawPhone !== '' && $rawPhone !== $normalizedPhone) {
+            $conds[] = 'contact_phone = ?';
+            $params[] = $rawPhone;
+        }
+        $sql = 'SELECT id FROM societies WHERE ' . implode(' OR ', $conds) . ' ORDER BY id ASC LIMIT 1';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+
+        return $row ? (int) $row['id'] : null;
+    }
+
     // ─── STATS ──────────────────────────────────────────────────────────────
     public function getStats()
     {
@@ -264,10 +339,20 @@ class SuperAdminController extends BaseController
             $this->auth->authorize('super_admin');
             $data = json_decode(file_get_contents("php://input"), true);
 
+            $allowed = [
+                'status', 'reviewedBy' => 'reviewed_by', 'rejectionReason' => 'rejection_reason',
+                'societyName' => 'society_name', 'address', 'city', 'state', 'pincode',
+                'towers', 'totalFlats' => 'total_flats', 'contactName' => 'contact_name',
+                'contactEmail' => 'contact_email', 'contactPhone' => 'contact_phone',
+                'gst', 'pan', 'message'
+            ];
+            
             $updateData = [];
-            if (isset($data['status']))          $updateData['status']           = $data['status'];
-            if (isset($data['reviewedBy']))       $updateData['reviewed_by']      = $data['reviewedBy'];
-            if (isset($data['rejectionReason']))  $updateData['rejection_reason'] = $data['rejectionReason'];
+            foreach ($allowed as $key => $val) {
+                $field = is_numeric($key) ? $val : $key;
+                $dbCol = is_numeric($key) ? $val : $val;
+                if (isset($data[$field])) $updateData[$dbCol] = $data[$field];
+            }
 
             if (!empty($updateData)) {
                 $updateData['reviewed_at'] = date('Y-m-d H:i:s');
@@ -292,6 +377,7 @@ class SuperAdminController extends BaseController
     {
         try {
             $this->auth->authorize('super_admin');
+            $this->ensureSocietyColumns();
 
             // Fetch lead
             $stmt = $this->db->prepare("SELECT * FROM society_registrations WHERE id = ?");
@@ -299,21 +385,38 @@ class SuperAdminController extends BaseController
             $lead = $stmt->fetch();
             if (!$lead) Response::notFound("Registration lead not found");
 
-            $normalizedPhone = $this->normalizePhone($lead['contact_phone']);
-            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $lead['society_name']), 0, 4)) . rand(100, 999);
+            $regId = (int) $id;
+            if (($lead['status'] ?? '') === 'approved') {
+                $stmt = $this->db->prepare('SELECT id, code FROM societies WHERE registration_id = ? ORDER BY id ASC LIMIT 1');
+                $stmt->execute([$regId]);
+                $linked = $stmt->fetch();
+                if ($linked) {
+                    Response::success('This registration is already approved.', [
+                        'society_id'       => (int) $linked['id'],
+                        'society_name'     => $lead['society_name'],
+                        'code'             => $linked['code'] ?? '',
+                        'admin_email'      => $lead['contact_email'],
+                        'admin_phone'      => $this->normalizePhone((string) ($lead['contact_phone'] ?? '')),
+                        'password'         => null,
+                        'already_approved' => true,
+                    ], 200);
+                }
+            }
 
-            // 1. Check for existing society by registration_id
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE registration_id = ?");
-            $stmt->execute([$id]);
-            $existingByReg = $stmt->fetch();
-            
-            // 2. ALSO check for existing society by name OR contact details (to handle manual creations)
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ? OR contact_email = ? OR contact_phone = ?");
-            $stmt->execute([$lead['society_name'], $lead['contact_email'], $normalizedPhone]);
-            $existingByData = $stmt->fetch();
-
-            $societyId = $existingByReg['id'] ?? $existingByData['id'] ?? null;
+            $normalizedPhone = $this->normalizePhone((string) ($lead['contact_phone'] ?? ''));
+            $societyId = $this->findSocietyIdForRegistrationLead($regId, $lead, $normalizedPhone);
             $isNewSociety = !$societyId;
+
+            $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', (string) ($lead['society_name'] ?? '')), 0, 4)) . rand(100, 999);
+            $codeRow = [];
+            if (!$isNewSociety) {
+                $stmt = $this->db->prepare('SELECT code FROM societies WHERE id = ?');
+                $stmt->execute([$societyId]);
+                $codeRow = $stmt->fetch() ?: [];
+                if (!empty($codeRow['code'])) {
+                    $code = $codeRow['code'];
+                }
+            }
 
             $this->beginTransaction();
 
@@ -340,15 +443,26 @@ class SuperAdminController extends BaseController
                 ]);
             } else {
                 // Update existing society and link it to this registration
-                $this->update('societies', [
-                    'registration_id' => (int)$id,
+                $upd = [
+                    'registration_id' => (int) $id,
                     'status'          => 'approved',
+                    'name'            => $lead['society_name'],
+                    'address'         => $lead['address']     ?? '',
+                    'city'            => $lead['city'],
+                    'state'           => $lead['state']       ?? '',
+                    'pincode'         => $lead['pincode']     ?? '',
                     'contact_person'  => $lead['contact_name'],
                     'contact_phone'   => $normalizedPhone,
                     'contact_email'   => $lead['contact_email'],
                     'towers'          => $lead['towers']      ?? 1,
                     'total_flats'     => $lead['total_flats'] ?? 0,
-                ], 'id = :id', ['id' => $societyId]);
+                    'gst'             => $lead['gst']         ?: null,
+                    'pan'             => $lead['pan']         ?: null,
+                ];
+                if (empty($codeRow['code'])) {
+                    $upd['code'] = $code;
+                }
+                $this->update('societies', $upd, 'id = :id', ['id' => $societyId]);
             }
 
             // Create or reuse admin user
@@ -382,9 +496,11 @@ class SuperAdminController extends BaseController
             // Link admin to society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // Delete the registration lead — it now lives in the societies table
-            // (As requested to prevent duplication/confusion in the UI)
-            $this->delete('society_registrations', 'id = ?', [(int)$id]);
+            // Mark registration approved (keep row for audit + bidirectional sync)
+            $this->update('society_registrations', [
+                'status'      => 'approved',
+                'reviewed_at' => date('Y-m-d H:i:s'),
+            ], 'id = :id', ['id' => $id]);
 
             $this->commit();
 
@@ -487,19 +603,92 @@ class SuperAdminController extends BaseController
             $allowedPlans = ['starter','professional','enterprise'];
             $plan = isset($data['plan']) && in_array($data['plan'], $allowedPlans) ? $data['plan'] : 'starter';
 
-            // Duplicate check (name, email, or phone)
-            $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ? OR contact_email = ? OR contact_phone = ?");
-            $stmt->execute([$data['name'], $data['contact_email'] ?? '', $data['contact_phone'] ?? '']);
-            $existing = $stmt->fetch();
-            if ($existing) {
-                Response::error("A society with this name, email, or phone already exists (#" . $existing['id'] . ")", 409);
-            }
-
             $phoneInput = $data['contact_phone'] ?? $data['contactPhone'] ?? null;
-            $normalizedPhone = $phoneInput ? $this->normalizePhone($phoneInput) : null;
+            $rawPhone = is_string($phoneInput) ? trim($phoneInput) : '';
+            $normalizedPhone = $rawPhone !== '' ? $this->normalizePhone($rawPhone) : null;
             $emailInput = $data['contact_email'] ?? $data['contactEmail'] ?? null;
+            $emailTrim = is_string($emailInput) ? trim($emailInput) : '';
+
+            $regIdRaw = $data['registration_id'] ?? $data['registrationId'] ?? null;
+            $regId = ($regIdRaw !== null && $regIdRaw !== '' && (int) $regIdRaw > 0) ? (int) $regIdRaw : null;
 
             $this->ensureSocietyColumns();
+
+            // Same registration → always update the one linked row (never a second INSERT)
+            if ($regId !== null) {
+                $stmt = $this->db->prepare('SELECT id, code FROM societies WHERE registration_id = ? ORDER BY id ASC LIMIT 1');
+                $stmt->execute([$regId]);
+                $byReg = $stmt->fetch();
+                if ($byReg) {
+                    $sid = (int) $byReg['id'];
+                    $code = !empty($byReg['code'])
+                        ? $byReg['code']
+                        : (strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $data['name']), 0, 4)) . rand(100, 999));
+                    $this->update('societies', [
+                        'name'           => $data['name'],
+                        'code'           => $code,
+                        'address'        => $data['address'],
+                        'city'           => $data['city']          ?? '',
+                        'state'          => $data['state']         ?? '',
+                        'country'        => $data['country']       ?? 'India',
+                        'pincode'        => $data['pincode']       ?? '',
+                        'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
+                        'contact_phone'  => $normalizedPhone,
+                        'contact_email'  => $emailTrim,
+                        'plan'           => $plan,
+                        'status'         => 'approved',
+                    ], 'id = :id', ['id' => $sid]);
+                    $this->update('society_registrations', [
+                        'status'      => 'approved',
+                        'reviewed_at' => date('Y-m-d H:i:s'),
+                    ], 'id = :id', ['id' => $regId]);
+                    $this->syncSocietyToReg($sid);
+                    Response::success('Society updated successfully', ['society_id' => $sid, 'code' => $code], 200);
+                }
+
+                $stmt = $this->db->prepare('SELECT * FROM society_registrations WHERE id = ?');
+                $stmt->execute([$regId]);
+                $regRow = $stmt->fetch();
+                if ($regRow) {
+                    $leadPhone = $this->normalizePhone((string) ($regRow['contact_phone'] ?? ''));
+                    $matchSid = $this->findSocietyIdForRegistrationLead($regId, $regRow, $leadPhone);
+                    if ($matchSid !== null) {
+                        $stmt = $this->db->prepare('SELECT code FROM societies WHERE id = ?');
+                        $stmt->execute([$matchSid]);
+                        $codeRow = $stmt->fetch() ?: [];
+                        $code = !empty($codeRow['code'])
+                            ? $codeRow['code']
+                            : (strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $data['name']), 0, 4)) . rand(100, 999));
+                        $this->update('societies', [
+                            'registration_id' => $regId,
+                            'name'           => $data['name'],
+                            'code'           => $code,
+                            'address'        => $data['address'],
+                            'city'           => $data['city']          ?? '',
+                            'state'          => $data['state']         ?? '',
+                            'country'        => $data['country']       ?? 'India',
+                            'pincode'        => $data['pincode']       ?? '',
+                            'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
+                            'contact_phone'  => $normalizedPhone,
+                            'contact_email'  => $emailTrim,
+                            'plan'           => $plan,
+                            'status'         => 'approved',
+                        ], 'id = :id', ['id' => $matchSid]);
+                        $this->update('society_registrations', [
+                            'status'      => 'approved',
+                            'reviewed_at' => date('Y-m-d H:i:s'),
+                        ], 'id = :id', ['id' => $regId]);
+                        $this->syncSocietyToReg($matchSid);
+                        Response::success('Society updated successfully', ['society_id' => $matchSid, 'code' => $code], 200);
+                    }
+                }
+            }
+
+            $dupId = $this->findDuplicateSocietyId($data['name'], $emailTrim !== '' ? $emailTrim : null, $normalizedPhone, $rawPhone !== '' ? $rawPhone : null);
+            if ($dupId !== null) {
+                Response::error('A society with this name, email, or phone already exists (#' . $dupId . ')', 409);
+            }
+
             $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $data['name']), 0, 4)) . rand(100, 999);
 
             $societyId = $this->insert('societies', [
@@ -512,20 +701,17 @@ class SuperAdminController extends BaseController
                 'pincode'        => $data['pincode']       ?? '',
                 'contact_person' => $data['contact_person'] ?? $data['contactName'] ?? '',
                 'contact_phone'  => $normalizedPhone,
-                'contact_email'  => $emailInput            ?? '',
+                'contact_email'  => $emailTrim,
                 'plan'           => $plan,
                 'status'         => 'approved',
             ]);
 
-            // If created from a registration, mark that registration approved
-            $regId = $data['registration_id'] ?? $data['registrationId'] ?? null;
-            if ($regId) {
+            if ($regId !== null) {
                 $this->update('society_registrations', [
                     'status'      => 'approved',
                     'reviewed_at' => date('Y-m-d H:i:s'),
                 ], 'id = :id', ['id' => $regId]);
-                // Link back
-                $this->update('societies', ['registration_id' => (int)$regId], 'id = :id', ['id' => $societyId]);
+                $this->update('societies', ['registration_id' => $regId], 'id = :id', ['id' => $societyId]);
             }
 
             Response::success("Society created successfully", ['society_id' => $societyId, 'code' => $code], 201);
