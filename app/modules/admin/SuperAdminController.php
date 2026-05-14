@@ -224,6 +224,15 @@ class SuperAdminController extends BaseController
         return $row ? (int) $row['id'] : null;
     }
 
+    /**
+     * Equality on string/ENUM columns that may use utf8mb4_general_ci while bound values use utf8mb4_unicode_ci (or vice versa).
+     * Coerces both sides to utf8mb4_unicode_ci to avoid MySQL error 1267.
+     */
+    private function sqlUnicodeEq(string $leftSql, string $placeholder = '?'): string
+    {
+        return "CONVERT(($leftSql) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT($placeholder USING utf8mb4) COLLATE utf8mb4_unicode_ci";
+    }
+
     // ─── STATS ──────────────────────────────────────────────────────────────
     public function getStats()
     {
@@ -236,7 +245,8 @@ class SuperAdminController extends BaseController
 
             try {
                 foreach (['approved','pending','verified'] as $s) {
-                    $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE status = ?");
+                    $wc = $this->sqlUnicodeEq('`status`');
+                    $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE $wc");
                     $stmt->execute([$s]);
                     $stats[$s] = $stmt->fetch()['count'];
                 }
@@ -245,23 +255,30 @@ class SuperAdminController extends BaseController
             }
 
             try {
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'new'");
+                $wcNew = $this->sqlUnicodeEq('`status`');
+                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM society_registrations WHERE $wcNew");
+                $stmt->execute(['new']);
                 $stats['newLeads'] = $stmt->fetch()['count'];
-                $stmt = $this->db->query("SELECT COUNT(*) as count FROM society_registrations WHERE status = 'under_review'");
+                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM society_registrations WHERE $wcNew");
+                $stmt->execute(['under_review']);
                 $stats['underReview'] = $stmt->fetch()['count'];
             } catch (Exception $e) {
                 $stats['newLeads'] = $stats['underReview'] = 0;
             }
 
-            $stmt = $this->db->query("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
+            $wcAdmin = $this->sqlUnicodeEq('`role`');
+            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM users WHERE $wcAdmin");
+            $stmt->execute(['admin']);
             $stats['totalAdmins'] = $stmt->fetch()['count'];
-            $stmt = $this->db->query("SELECT COUNT(*) as count FROM users WHERE role = 'resident'");
+            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM users WHERE $wcAdmin");
+            $stmt->execute(['resident']);
             $stats['totalResidents'] = $stmt->fetch()['count'];
 
             $stats['trend'] = [];
             for ($i = 5; $i >= 0; $i--) {
                 $d = new DateTime("-$i months");
-                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE DATE_FORMAT(created_at,'%Y-%m') = ?");
+                $wcMonth = $this->sqlUnicodeEq("DATE_FORMAT(`created_at`,'%Y-%m')");
+                $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE $wcMonth");
                 $stmt->execute([$d->format('Y-m')]);
                 $stats['trend'][] = ['month' => $d->format('M y'), 'count' => $stmt->fetch()['count']];
             }
@@ -269,7 +286,8 @@ class SuperAdminController extends BaseController
             $stats['planDist'] = [];
             foreach (['starter','professional','enterprise'] as $plan) {
                 try {
-                    $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE plan = ?");
+                    $wcPlan = $this->sqlUnicodeEq('`plan`');
+                    $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM societies WHERE $wcPlan");
                     $stmt->execute([$plan]);
                     $stats['planDist'][] = ['plan' => $plan, 'count' => $stmt->fetch()['count']];
                 } catch (Exception $e) {
