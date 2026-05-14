@@ -360,6 +360,62 @@ class SuperAdminController extends BaseController
         $this->createPublicSocietyRegistration();
     }
 
+    /**
+     * Merge optional JSON body from POST /registrations/:id/approve into a fetched lead row (camelCase keys).
+     * Does not handle adminPassword or plan (handled separately in approveRegistrationLead).
+     */
+    private function mergeApprovePayloadIntoLead(array $lead, array $payload): array
+    {
+        if (empty($payload)) {
+            return $lead;
+        }
+
+        $applyString = function (string $snake, array $keys) use (&$lead, $payload): void {
+            foreach ($keys as $k) {
+                if (!array_key_exists($k, $payload)) {
+                    continue;
+                }
+                $v = $payload[$k];
+                if ($v === null) {
+                    return;
+                }
+                if (is_string($v)) {
+                    $v = trim($v);
+                }
+                if (in_array($snake, ['gst', 'pan'], true) && $v === '') {
+                    $v = null;
+                }
+                $lead[$snake] = $v;
+
+                return;
+            }
+        };
+
+        $applyString('society_name', ['societyName', 'society_name']);
+        $applyString('address', ['address']);
+        $applyString('city', ['city']);
+        $applyString('state', ['state']);
+        $applyString('pincode', ['pincode']);
+        $applyString('contact_name', ['contactName', 'contact_name']);
+        $applyString('contact_email', ['contactEmail', 'contact_email']);
+        $applyString('contact_phone', ['contactPhone', 'contact_phone']);
+        $applyString('gst', ['gst']);
+        $applyString('pan', ['pan']);
+        $applyString('country', ['country']);
+
+        if (array_key_exists('towers', $payload)) {
+            $lead['towers'] = max(1, (int) $payload['towers']);
+        }
+        if (array_key_exists('totalFlats', $payload)) {
+            $lead['total_flats'] = max(0, (int) $payload['totalFlats']);
+        }
+        if (array_key_exists('total_flats', $payload)) {
+            $lead['total_flats'] = max(0, (int) $payload['total_flats']);
+        }
+
+        return $lead;
+    }
+
     /** Super admin updates registration status (new → under_review | rejected). Syncs to societies. */
     public function updateRegistration($id)
     {
@@ -400,12 +456,22 @@ class SuperAdminController extends BaseController
      *  1. Create society row (idempotent — checks for existing society with same registration_id)
      *  2. Create or reuse admin user
      *  3. Mark registration as 'approved' (NOT deleted — kept for audit + sync)
+     *
+     * Optional JSON body (same session) lets super admin correct society + admin fields before activation:
+     * societyName, address, city, state, pincode, country, towers, totalFlats, gst, pan,
+     * contactName, contactEmail, contactPhone, plan (starter|professional|enterprise),
+     * adminPassword (optional; min 8 chars if set — otherwise a random password is generated).
      */
     public function approveRegistrationLead($id)
     {
         try {
             $this->auth->authorize('super_admin');
             $this->ensureSocietyColumns();
+
+            $payload = json_decode((string) file_get_contents('php://input'), true);
+            if (!is_array($payload)) {
+                $payload = [];
+            }
 
             // Fetch lead
             $stmt = $this->db->prepare("SELECT * FROM society_registrations WHERE id = ?");
@@ -429,6 +495,35 @@ class SuperAdminController extends BaseController
                         'already_approved' => true,
                     ], 200);
                 }
+            }
+
+            $lead = $this->mergeApprovePayloadIntoLead($lead, $payload);
+
+            $req = ['society_name' => 'Society name', 'city' => 'City', 'contact_name' => 'Admin name', 'contact_email' => 'Admin email', 'contact_phone' => 'Admin phone'];
+            $missing = [];
+            foreach ($req as $field => $label) {
+                if (!isset($lead[$field]) || trim((string) $lead[$field]) === '') {
+                    $missing[] = "{$label} is required";
+                }
+            }
+            if (!empty($missing)) {
+                Response::validationError($missing);
+            }
+            if (!filter_var($lead['contact_email'], FILTER_VALIDATE_EMAIL)) {
+                Response::error('Invalid admin email format', 422);
+            }
+
+            $plan = 'starter';
+            if (!empty($payload['plan']) && in_array($payload['plan'], ['starter', 'professional', 'enterprise'], true)) {
+                $plan = $payload['plan'];
+            }
+
+            $passwordPlain = 'Admin@' . rand(1000, 9999);
+            if (!empty($payload['adminPassword'])) {
+                if (strlen((string) $payload['adminPassword']) < 8) {
+                    Response::error('adminPassword must be at least 8 characters when provided', 422);
+                }
+                $passwordPlain = (string) $payload['adminPassword'];
             }
 
             $normalizedPhone = $this->normalizePhone((string) ($lead['contact_phone'] ?? ''));
@@ -456,12 +551,12 @@ class SuperAdminController extends BaseController
                     'address'         => $lead['address']     ?? '',
                     'city'            => $lead['city'],
                     'state'           => $lead['state']       ?? '',
-                    'country'         => 'India',
+                    'country'         => $lead['country'] ?? 'India',
                     'pincode'         => $lead['pincode']     ?? '',
                     'contact_person'  => $lead['contact_name'],
                     'contact_phone'   => $normalizedPhone,
                     'contact_email'   => $lead['contact_email'],
-                    'plan'            => 'starter',
+                    'plan'            => $plan,
                     'towers'          => $lead['towers']      ?? 1,
                     'total_flats'     => $lead['total_flats'] ?? 0,
                     'gst'             => $lead['gst']         ?: null,
@@ -478,10 +573,12 @@ class SuperAdminController extends BaseController
                     'address'         => $lead['address']     ?? '',
                     'city'            => $lead['city'],
                     'state'           => $lead['state']       ?? '',
+                    'country'         => $lead['country'] ?? 'India',
                     'pincode'         => $lead['pincode']     ?? '',
                     'contact_person'  => $lead['contact_name'],
                     'contact_phone'   => $normalizedPhone,
                     'contact_email'   => $lead['contact_email'],
+                    'plan'            => $plan,
                     'towers'          => $lead['towers']      ?? 1,
                     'total_flats'     => $lead['total_flats'] ?? 0,
                     'gst'             => $lead['gst']         ?: null,
@@ -494,17 +591,21 @@ class SuperAdminController extends BaseController
             }
 
             // Create or reuse admin user
-            $password = 'Admin@' . rand(1000, 9999);
             $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
             $stmt->execute([$lead['contact_email'], $normalizedPhone]);
             $existingUser = $stmt->fetch();
 
+            $passwordHash = password_hash($passwordPlain, PASSWORD_DEFAULT);
+
             if ($existingUser) {
                 $adminId = $existingUser['id'];
                 $this->update('users', [
+                    'name'       => $lead['contact_name'],
+                    'email'      => $lead['contact_email'],
+                    'phone'      => $normalizedPhone,
                     'role'       => 'admin',
                     'society_id' => $societyId,
-                    'password'   => password_hash($password, PASSWORD_DEFAULT),
+                    'password'   => $passwordHash,
                     'status'     => 'active',
                 ], 'id = :id', ['id' => $adminId]);
             } else {
@@ -514,7 +615,7 @@ class SuperAdminController extends BaseController
                     'name'        => $lead['contact_name'],
                     'email'       => $lead['contact_email'],
                     'phone'       => $normalizedPhone,
-                    'password'    => password_hash($password, PASSWORD_DEFAULT),
+                    'password'    => $passwordHash,
                     'role'        => 'admin',
                     'society_id'  => $societyId,
                     'status'      => 'active',
@@ -524,10 +625,22 @@ class SuperAdminController extends BaseController
             // Link admin to society
             $this->update('societies', ['admin_id' => $adminId], 'id = :id', ['id' => $societyId]);
 
-            // Mark registration approved (keep row for audit + bidirectional sync)
+            // Persist final lead snapshot + approved status (audit trail matches activated society)
             $this->update('society_registrations', [
-                'status'      => 'approved',
-                'reviewed_at' => date('Y-m-d H:i:s'),
+                'society_name'  => $lead['society_name'],
+                'address'       => $lead['address'] ?? '',
+                'city'          => $lead['city'],
+                'state'         => $lead['state'] ?? '',
+                'pincode'       => $lead['pincode'] ?? '',
+                'towers'        => $lead['towers'] ?? 1,
+                'total_flats'   => $lead['total_flats'] ?? 0,
+                'contact_name'  => $lead['contact_name'],
+                'contact_email' => $lead['contact_email'],
+                'contact_phone' => $lead['contact_phone'],
+                'gst'           => $lead['gst'] ?: null,
+                'pan'           => $lead['pan'] ?: null,
+                'status'        => 'approved',
+                'reviewed_at'   => date('Y-m-d H:i:s'),
             ], 'id = :id', ['id' => $id]);
 
             $this->commit();
@@ -538,7 +651,7 @@ class SuperAdminController extends BaseController
                 'code'         => $code,
                 'admin_email'  => $lead['contact_email'],
                 'admin_phone'  => $normalizedPhone,
-                'password'     => $password,
+                'password'     => $passwordPlain,
             ]);
         } catch (Exception $e) {
             $this->rollback();
