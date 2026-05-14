@@ -6,7 +6,8 @@ require_once __DIR__ . '/../../core/BaseController.php';
  *
  * Design contract:
  *  - society_registrations  = permanent lead/audit table. NEVER deleted. Status: new → under_review → approved | rejected
- *  - societies              = live society table. Created on approval. Linked via societies.registration_id → society_registrations.id
+ *  - societies              = live society table. Rows are created only when a super admin approves a lead (or adds a society manually) — never from the public landing form.
+ *  - Linked via societies.registration_id → society_registrations.id
  *  - Any status/field change on either table is immediately mirrored to the other via syncSocietyToReg() / syncRegToSociety()
  */
 class SuperAdminController extends BaseController
@@ -302,8 +303,11 @@ class SuperAdminController extends BaseController
         }
     }
 
-    /** Public endpoint — called from the landing page form. */
-    public function createRegistration()
+    /**
+     * Public landing-page lead capture. Writes ONLY `society_registrations` (never `societies`).
+     * No auth. Use POST /api/public/society-registrations in new clients.
+     */
+    public function createPublicSocietyRegistration()
     {
         try {
             $data = json_decode(file_get_contents("php://input"), true);
@@ -330,6 +334,12 @@ class SuperAdminController extends BaseController
         } catch (Exception $e) {
             Response::error("Failed to create registration: " . $e->getMessage(), 500);
         }
+    }
+
+    /** @deprecated Legacy URL — use createPublicSocietyRegistration / POST /api/public/society-registrations */
+    public function createRegistration()
+    {
+        $this->createPublicSocietyRegistration();
     }
 
     /** Super admin updates registration status (new → under_review | rejected). Syncs to societies. */

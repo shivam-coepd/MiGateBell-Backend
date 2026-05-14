@@ -71,6 +71,11 @@ try {
         Response::success("API is healthy");
     }
 
+    // Public society lead form (landing page) — society_registrations only, never societies
+    if ($uri === '/api/public/society-registrations' && $method === 'POST') {
+        (new SuperAdminController())->createPublicSocietyRegistration();
+    }
+
     // Auth routes
     if ($uri === '/api/auth/register' && $method === 'POST') {
         (new AuthController)->register();
@@ -488,7 +493,7 @@ try {
         (new SuperAdminController())->getRegistrations();
     }
     if ($uri === '/api/superadmin/registrations' && $method === 'POST') {
-        (new SuperAdminController())->createRegistration();
+        (new SuperAdminController())->createPublicSocietyRegistration();
     }
     if (preg_match('/^\/api\/superadmin\/registrations\/([0-9]+)$/', $uri, $matches) && $method === 'PUT') {
         (new SuperAdminController())->updateRegistration($matches[1]);
