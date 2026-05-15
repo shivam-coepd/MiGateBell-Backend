@@ -15,10 +15,16 @@
           "name": "Register",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "// For super_admin role\n// {\n//   \"name\": \"Super Admin\",\n//   \"phone\": \"1122334455\",\n//   \"password\": \"Pass@123\",\n//   \"role\": \"super_admin\",\n//   \"status\": \"active\"\n// }\n\n// For admin role\n// {\n//   \"name\": \"Riddhi-Siddhi Admin\",\n//   \"phone\": \"6677889911\",\n//   \"password\": \"Pass@123\",\n//   \"society_id\": 2,\n//   \"role\": \"admin\"\n// }\n\n// for resident role\n{\n  \"name\": \"Priya bhosale\",\n  \"phone\": \"8976351526\",\n  \"password\": \"Pass@123\",\n  \"society_id\":1,\n  \"role\": \"resident\",\n  \"status\": \"active\"\n}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+              "raw": "{\n  \"name\": \"Test Resident\",\n  \"phone\": \"9012345678\",\n  \"password\": \"Pass@123\",\n  \"email\": \"test.resident@example.com\",\n  \"society_id\": 1,\n  \"role\": \"resident\",\n  \"status\": \"active\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -65,10 +71,16 @@
           "name": "Login",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "// Super Admin user\n// {\n//   \"phone\": \"1122334455\",\n//   \"password\": \"Pass@123\"\n// }\n\n// Society Admin user\n// {\n//   \"phone\": \"6677889900\",\n//   \"password\": \"Pass@123\"\n// }\n\n// Resident user\n// {\n//   \"phone\": \"8976351526\",\n//   \"password\": \"Pass@123\"\n// }\n{\n  \"phone\": \"8010155144\",\n  \"password\": \"Pass@123\"\n}\n\n",
+              "raw": "{\n  \"phone\": \"6677889900\",\n  \"password\": \"Pass@123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

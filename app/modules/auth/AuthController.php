@@ -6,10 +6,55 @@ require_once __DIR__ . '/../../core/BaseController.php';
 class AuthController extends BaseController
 {
 
+  /**
+   * Parse JSON request body with clear errors (Postman bodies often include // comments).
+   */
+  private function parseJsonBody()
+  {
+    $raw = file_get_contents("php://input");
+    if ($raw === false || trim($raw) === '') {
+      Response::error(
+        "Request body is empty. Set Body → raw → JSON and Content-Type: application/json.",
+        400
+      );
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+      $hint = (strpos($raw, '//') !== false)
+        ? ' Remove all // comment lines from the Postman body — only valid JSON is allowed.'
+        : '';
+      Response::error('Invalid JSON body: ' . json_last_error_msg() . '.' . $hint, 400);
+    }
+
+    return $data;
+  }
+
+  private function normalizePhone($phone)
+  {
+    $digits = preg_replace('/\D/', '', (string) $phone);
+    if (strlen($digits) === 12 && substr($digits, 0, 2) === '91') {
+      $digits = substr($digits, 2);
+    }
+    return $digits;
+  }
+
+  private function resolveRegistrationStatus($role, $requestedStatus)
+  {
+    $allowed = ['active', 'inactive', 'blocked', 'pending_verification'];
+    if (!empty($requestedStatus) && in_array($requestedStatus, $allowed, true)) {
+      return $requestedStatus;
+    }
+    if (in_array($role, ['super_admin', 'admin', 'guard', 'staff'], true)) {
+      return 'active';
+    }
+    return 'pending_verification';
+  }
+
   public function register()
   {
     try {
-      $data = json_decode(file_get_contents("php://input"), true);
+      $data = $this->parseJsonBody();
 
       // Validation
       $errors = [];
@@ -19,8 +64,6 @@ class AuthController extends BaseController
         $errors[] = 'Phone is required';
       if (empty($data['password']))
         $errors[] = 'Password is required';
-      if (empty($data['email']))
-        $errors[] = 'Email is required';
 
       // Only require society_id for non-super_admin roles
       if (empty($data['society_id']) && (!isset($data['role']) || $data['role'] !== 'super_admin')) {
@@ -31,9 +74,18 @@ class AuthController extends BaseController
         Response::validationError($errors);
       }
 
+      $data['phone'] = $this->normalizePhone($data['phone']);
+
+      // Email optional in Postman — generate unique placeholder from phone if omitted
+      if (empty($data['email'])) {
+        $data['email'] = $data['phone'] . '@users.mygatebell.local';
+      } else {
+        $data['email'] = trim($data['email']);
+      }
+
       // Validate phone number format
-      if (!empty($data['phone']) && !preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
-        Response::error("Phone number must be 10-15 digits");
+      if (!preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
+        Response::error("Phone number must be 10-15 digits (no spaces or country code prefix)");
       }
 
       // Validate password strength
@@ -84,12 +136,15 @@ class AuthController extends BaseController
       $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
 
       // Insert user (society_id can be NULL for super_admin)
-      $societyId = isset($data['society_id']) ? $data['society_id'] : null;
+      $societyId = isset($data['society_id']) ? (int) $data['society_id'] : null;
+      if ($societyId === 0) {
+        $societyId = null;
+      }
       $role = $data['role'] ?? 'resident';
 
       // Validate role against allowed ENUM values
       $allowedRoles = ['admin', 'resident', 'guard', 'staff', 'super_admin'];
-      if (!in_array($role, $allowedRoles)) {
+      if (!in_array($role, $allowedRoles, true)) {
         Response::error("Invalid role. Allowed values: " . implode(', ', $allowedRoles));
       }
 
@@ -97,17 +152,14 @@ class AuthController extends BaseController
 
       $fields = [
         'app_user_id' => $appUserId,
-        'name' => $data['name'],
+        'name' => trim($data['name']),
         'email' => $data['email'],
         'phone' => $data['phone'],
         'password' => $hashedPassword,
         'role' => $role,
-        'society_id' => $societyId
+        'society_id' => $societyId,
+        'status' => $this->resolveRegistrationStatus($role, $data['status'] ?? null),
       ];
-
-      if ($role === 'super_admin') {
-        $fields['status'] = 'active';
-      }
 
       $columns = implode(', ', array_keys($fields));
       $placeholders = implode(', ', array_fill(0, count($fields), '?')); // Create ?, ?, ... string
@@ -148,12 +200,14 @@ class AuthController extends BaseController
   public function login()
   {
     try {
-      $data = json_decode(file_get_contents("php://input"), true);
+      $data = $this->parseJsonBody();
 
       // Validation
       if (empty($data['phone']) || empty($data['password'])) {
         Response::error("Phone and password are required");
       }
+
+      $phone = $this->normalizePhone($data['phone']);
 
       // Get user
       $stmt = $this->db->prepare(
@@ -161,7 +215,7 @@ class AuthController extends BaseController
      FROM users WHERE phone = ?"
       );
 
-      $stmt->execute([$data['phone']]);
+      $stmt->execute([$phone]);
       $user = $stmt->fetch();
 
       if (!$user || !password_verify($data['password'], $user['password'])) {
