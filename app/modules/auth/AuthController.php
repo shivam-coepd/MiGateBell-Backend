@@ -6,25 +6,58 @@ require_once __DIR__ . '/../../core/BaseController.php';
 class AuthController extends BaseController
 {
 
-  /**
-   * Parse JSON request body with clear errors (Postman bodies often include // comments).
-   */
+  // Strip Postman line comments before json_decode.
+  private function sanitizeJsonString($raw)
+  {
+    $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw);
+    $lines = preg_split('/\R/', $raw);
+    $out = [];
+    foreach ($lines as $line) {
+      $trimmed = ltrim($line);
+      if ($trimmed === '' || strpos($trimmed, '//') === 0) {
+        continue;
+      }
+      $out[] = $line;
+    }
+    $json = implode("\n", $out);
+    $json = preg_replace('#/\*.*?\*/#s', '', $json);
+    $json = preg_replace('/,\s*([\]}])/', '$1', $json);
+    return trim($json);
+  }
+
+  // Parse JSON body; tolerates Postman line-comment lines above the JSON object.
   private function parseJsonBody()
   {
     $raw = file_get_contents("php://input");
     if ($raw === false || trim($raw) === '') {
       Response::error(
-        "Request body is empty. Set Body → raw → JSON and Content-Type: application/json.",
+        "Request body is empty. In Postman: Body → raw → JSON, header Content-Type: application/json.",
         400
       );
     }
 
-    $data = json_decode($raw, true);
+    $attempts = [trim($raw), $this->sanitizeJsonString($raw)];
+    $data = null;
+    $lastError = '';
+
+    foreach (array_unique($attempts) as $candidate) {
+      if ($candidate === '') {
+        continue;
+      }
+      $decoded = json_decode($candidate, true);
+      if (is_array($decoded)) {
+        $data = $decoded;
+        break;
+      }
+      $lastError = json_last_error_msg();
+    }
+
     if (!is_array($data)) {
-      $hint = (strpos($raw, '//') !== false)
-        ? ' Remove all // comment lines from the Postman body — only valid JSON is allowed.'
-        : '';
-      Response::error('Invalid JSON body: ' . json_last_error_msg() . '.' . $hint, 400);
+      Response::error(
+        'Invalid JSON body: ' . $lastError
+        . '. Use Body → raw → JSON with a single object (no // comments). Example: {"name":"Test","phone":"9012345678","password":"Pass@123","society_id":1,"role":"resident"}',
+        400
+      );
     }
 
     return $data;
