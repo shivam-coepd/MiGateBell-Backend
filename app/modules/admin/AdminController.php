@@ -689,6 +689,43 @@ class AdminController extends BaseController
     }
   }
 
+  /**
+   * List all flats for a society (occupied and vacant) — society admin dashboard.
+   */
+  public function getAllFlatsBySociety($societyId)
+  {
+    try {
+      $user = $this->auth->authorizeAny(['super_admin', 'admin']);
+
+      if ($user['role'] === 'admin' && (int) $user['society_id'] !== (int) $societyId) {
+        Response::forbidden("Cannot access flats for another society");
+      }
+
+      $stmt = $this->db->prepare("SELECT id FROM societies WHERE id = ?");
+      $stmt->execute([$societyId]);
+      if (!$stmt->fetch()) {
+        Response::notFound("Society not found");
+      }
+
+      $stmt = $this->db->prepare("
+        SELECT f.id, f.flat_number, f.floor_number, f.area_sqft, f.building_id,
+               f.owner_id, f.tenant_id, f.society_id, f.is_occupied, f.created_at,
+               b.name AS building_name
+        FROM flats f
+        LEFT JOIN buildings b ON f.building_id = b.id
+        WHERE f.society_id = ?
+        ORDER BY b.name, f.floor_number, f.flat_number
+      ");
+      $stmt->execute([$societyId]);
+      $flats = $stmt->fetchAll();
+
+      Response::success("Flats retrieved successfully", $flats);
+    } catch (Exception $e) {
+      error_log("Get all flats by society error: " . $e->getMessage());
+      Response::error("Failed to retrieve flats: " . $e->getMessage(), 500);
+    }
+  }
+
   public function getFlatsByBuilding($buildingId)
   {
     try {

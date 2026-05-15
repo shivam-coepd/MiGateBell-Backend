@@ -129,6 +129,10 @@ try {
         (new AdminController)->getBuildingsBySociety($matches[1]);
     }
 
+    if (preg_match('/^\/api\/flats\/all-by-society\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
+        (new AdminController)->getAllFlatsBySociety($matches[1]);
+    }
+
     // Flats endpoints
     if (preg_match('/^\/api\/flats\/by-building\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
         (new AdminController)->getFlatsByBuilding($matches[1]);
@@ -530,6 +534,23 @@ try {
     }
     if (preg_match('/^\/api\/superadmin\/admins\/([0-9]+)\/toggle$/', $uri, $matches) && $method === 'PUT') {
         (new SuperAdminController())->toggleAdmin($matches[1]);
+    }
+
+    // Visitor routes (gate management)
+    if ($uri === '/api/visitors' && $method === 'POST') {
+        (new VisitorsController())->addVisitor();
+    }
+    if ($uri === '/api/visitors' && $method === 'GET') {
+        (new VisitorsController())->getVisitors();
+    }
+    if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'GET') {
+        (new VisitorsController())->getVisitorById($matches[1]);
+    }
+    if (preg_match('/^\/api\/visitors\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
+        (new VisitorsController())->updateVisitorStatus($matches[1]);
+    }
+    if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new VisitorsController())->deleteVisitor($matches[1]);
     }
 
     // If no route matched, return 404
