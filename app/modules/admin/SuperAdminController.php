@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../core/BaseController.php';
+require_once __DIR__ . '/../../helpers/app_userID_helper.php';
 
 /**
  * SuperAdminController
@@ -948,31 +949,69 @@ class SuperAdminController extends BaseController
         try {
             $this->auth->authorize('super_admin');
             $data = json_decode(file_get_contents("php://input"), true);
+            if (!is_array($data)) {
+                $data = [];
+            }
 
-            $errors = $this->validateRequiredFields($data, ['name','email','phone','password']);
-            if (!empty($errors)) Response::validationError($errors);
+            $name = trim((string) ($data['name'] ?? $data['adminName'] ?? ''));
+            $email = trim((string) ($data['email'] ?? $data['adminEmail'] ?? ''));
+            $phoneRaw = trim((string) ($data['phone'] ?? $data['adminPhone'] ?? ''));
+            $password = (string) ($data['password'] ?? $data['adminPassword'] ?? '');
 
-            // Duplicate check
-            $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ? OR phone = ?");
-            $stmt->execute([$data['email'], $data['phone']]);
-            if ($stmt->fetch()) Response::error("User with this email or phone already exists", 409);
+            $errors = [];
+            if ($name === '') {
+                $errors[] = 'name is required';
+            }
+            if ($email === '') {
+                $errors[] = 'email is required';
+            } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $errors[] = 'email must be a valid address';
+            }
+            if ($phoneRaw === '') {
+                $errors[] = 'phone is required';
+            }
+            if ($password === '') {
+                $errors[] = 'password is required';
+            } elseif (strlen($password) < 8) {
+                $errors[] = 'password must be at least 8 characters';
+            }
+            if (!empty($errors)) {
+                Response::validationError($errors);
+            }
 
+            $stmt = $this->db->prepare('SELECT id FROM societies WHERE id = ?');
+            $stmt->execute([$societyId]);
+            if (!$stmt->fetch()) {
+                Response::notFound('Society not found');
+            }
+
+            $normalizedPhone = $this->normalizePhone($phoneRaw);
+
+            // Match approveRegistrationLead: same email or normalized/raw phone
+            $stmt = $this->db->prepare('SELECT id FROM users WHERE email = ? OR phone = ? OR phone = ?');
+            $stmt->execute([$email, $phoneRaw, $normalizedPhone]);
+            if ($stmt->fetch()) {
+                Response::error('User with this email or phone already exists', 409);
+            }
+
+            $appUserId = AppUserIdHelper::generateUnique($this->db);
             $userId = $this->insert('users', [
-                'name'       => $data['name'],
-                'email'      => $data['email'],
-                'phone'      => $data['phone'],
-                'password'   => password_hash($data['password'], PASSWORD_DEFAULT),
-                'role'       => 'admin',
-                'society_id' => $societyId,
-                'status'     => 'active',
+                'app_user_id' => $appUserId,
+                'name'        => $name,
+                'email'       => $email,
+                'phone'       => $normalizedPhone,
+                'password'    => password_hash($password, PASSWORD_DEFAULT),
+                'role'        => 'admin',
+                'society_id'  => $societyId,
+                'status'      => 'active',
             ]);
 
             // Link admin to society
             $this->update('societies', ['admin_id' => $userId, 'status' => 'approved'], 'id = :id', ['id' => $societyId]);
 
-            Response::success("Admin created", ['user_id' => $userId], 201);
+            Response::success('Admin created', ['user_id' => (int) $userId], 201);
         } catch (Exception $e) {
-            Response::error("Failed to create admin: " . $e->getMessage(), 500);
+            Response::error('Failed to create admin: ' . $e->getMessage(), 500);
         }
     }
 

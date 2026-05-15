@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../core/BaseController.php';
+require_once __DIR__ . '/../../helpers/app_userID_helper.php';
 
 class UserManagementController extends BaseController
 {
@@ -188,8 +189,10 @@ class UserManagementController extends BaseController
             }
 
             $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+            $appUserId = AppUserIdHelper::generateUnique($this->db);
 
             $userId = $this->insert('users', [
+                'app_user_id' => $appUserId,
                 'name' => $data['name'],
                 'phone' => $data['phone'],
                 'email' => $data['email'] ?? null,
