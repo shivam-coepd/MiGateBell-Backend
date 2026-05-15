@@ -5,8 +5,7 @@ class HelpdeskController extends BaseController {
   
   public function createTicket() {
     try {
-      // Residents can create tickets
-      $user = $this->auth->authorize('resident');
+      $user = $this->auth->authorizeAny(['resident', 'admin']);
       
       $data = json_decode(file_get_contents("php://input"), true);
       
@@ -29,6 +28,19 @@ class HelpdeskController extends BaseController {
       if (!in_array($priority, $allowedPriorities)) {
         Response::error("Invalid priority. Allowed values: " . implode(', ', $allowedPriorities));
       }
+
+      $residentId = $user['uid'];
+      if ($user['role'] === 'admin') {
+        if (empty($data['resident_id'])) {
+          Response::error("resident_id is required when creating a ticket as society admin");
+        }
+        $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND society_id = ? AND role = 'resident'");
+        $stmt->execute([$data['resident_id'], $user['society_id']]);
+        if (!$stmt->fetch()) {
+          Response::error("Invalid resident for this society", 400);
+        }
+        $residentId = (int) $data['resident_id'];
+      }
       
       // Generate ticket number
       $ticketNumber = $this->generateTicketNumber($user['society_id']);
@@ -38,10 +50,10 @@ class HelpdeskController extends BaseController {
         'ticket_number' => $ticketNumber,
         'title' => $data['title'],
         'description' => $data['description'],
-        'category' => $data['category'] ?? 'general',
-        'priority' => $data['priority'] ?? 'medium',
+        'category' => $category,
+        'priority' => $priority,
         'status' => 'open',
-        'resident_id' => $user['uid'],
+        'resident_id' => $residentId,
         'society_id' => $user['society_id']
       ]);
       
@@ -129,9 +141,15 @@ class HelpdeskController extends BaseController {
       $countStmt->execute($params);
       $total = $countStmt->fetch()['count'];
       
-      // Get tickets
+      // Get tickets (flat_number from resident's linked flat)
       $sql = "
-        SELECT t.*, u.name as resident_name, a.name as assigned_to_name
+        SELECT t.*, u.name as resident_name, a.name as assigned_to_name,
+               (
+                 SELECT f.flat_number FROM flats f
+                 WHERE f.society_id = t.society_id
+                   AND (f.owner_id = t.resident_id OR f.tenant_id = t.resident_id)
+                 ORDER BY f.id ASC LIMIT 1
+               ) AS flat_number
         FROM tickets t
         LEFT JOIN users u ON t.resident_id = u.id
         LEFT JOIN users a ON t.assigned_to = a.id
@@ -173,7 +191,13 @@ class HelpdeskController extends BaseController {
       
       // Get ticket
       $sql = "
-        SELECT t.*, u.name as resident_name, a.name as assigned_to_name
+        SELECT t.*, u.name as resident_name, a.name as assigned_to_name,
+               (
+                 SELECT f.flat_number FROM flats f
+                 WHERE f.society_id = t.society_id
+                   AND (f.owner_id = t.resident_id OR f.tenant_id = t.resident_id)
+                 ORDER BY f.id ASC LIMIT 1
+               ) AS flat_number
         FROM tickets t
         LEFT JOIN users u ON t.resident_id = u.id
         LEFT JOIN users a ON t.assigned_to = a.id
