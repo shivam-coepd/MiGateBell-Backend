@@ -1015,6 +1015,80 @@ class SuperAdminController extends BaseController
         }
     }
 
+    /**
+     * Update an existing society admin's details (name, email, phone, password).
+     * The admin must belong to the given society.
+     */
+    public function updateSocietyAdmin($societyId)
+    {
+        try {
+            $this->auth->authorize('super_admin');
+            $data = json_decode(file_get_contents("php://input"), true);
+            if (!is_array($data)) {
+                $data = [];
+            }
+
+            $name = trim((string) ($data['name'] ?? ''));
+            $email = trim((string) ($data['email'] ?? ''));
+            $phoneRaw = trim((string) ($data['phone'] ?? ''));
+            $password = (string) ($data['password'] ?? '');
+
+            // Validate required fields
+            $errors = [];
+            if ($name === '') $errors[] = 'name is required';
+            if ($email === '') $errors[] = 'email is required';
+            elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'email must be a valid address';
+            if ($phoneRaw === '') $errors[] = 'phone is required';
+            if ($password !== '' && strlen($password) < 8) $errors[] = 'password must be at least 8 characters';
+            if (!empty($errors)) Response::validationError($errors);
+
+            $normalizedPhone = $this->normalizePhone($phoneRaw);
+
+            // Find the admin for this society
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE society_id = ? AND role = 'admin' ORDER BY id ASC LIMIT 1");
+            $stmt->execute([$societyId]);
+            $admin = $stmt->fetch();
+            if (!$admin) Response::notFound("No admin found for this society");
+
+            $adminId = $admin['id'];
+
+            // Check for conflicts with other users (exclude current admin)
+            $stmt = $this->db->prepare("SELECT id FROM users WHERE (email = ? OR phone = ? OR phone = ?) AND id != ?");
+            $stmt->execute([$email, $phoneRaw, $normalizedPhone, $adminId]);
+            if ($stmt->fetch()) {
+                Response::error("Another user with this email or phone already exists", 409);
+            }
+
+            // Build update data
+            $updateData = [
+                'name'  => $name,
+                'email' => $email,
+                'phone' => $normalizedPhone,
+            ];
+            if ($password !== '') {
+                $updateData['password'] = password_hash($password, PASSWORD_DEFAULT);
+            }
+
+            $this->update('users', $updateData, 'id = :id', ['id' => $adminId]);
+
+            // Also sync back to the society's contact fields for consistency
+            $this->update('societies', [
+                'contact_person' => $name,
+                'contact_email'  => $email,
+                'contact_phone'  => $normalizedPhone,
+            ], 'id = :id', ['id' => $societyId]);
+
+            Response::success("Admin updated successfully", [
+                'admin_id' => (int) $adminId,
+                'name'     => $name,
+                'email'    => $email,
+                'phone'    => $normalizedPhone,
+            ]);
+        } catch (Exception $e) {
+            Response::error("Failed to update admin: " . $e->getMessage(), 500);
+        }
+    }
+
     public function getAdmins()
     {
         try {

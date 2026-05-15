@@ -512,8 +512,10 @@ try {
         if ($method === 'PUT')    $controller->updateSociety($matches[1]);
         if ($method === 'DELETE') $controller->deleteSociety($matches[1]);
     }
-    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/admin$/', $uri, $matches) && $method === 'POST') {
-        (new SuperAdminController())->createSocietyAdmin($matches[1]);
+    if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/admin$/', $uri, $matches)) {
+        $controller = new SuperAdminController();
+        if ($method === 'POST') $controller->createSocietyAdmin($matches[1]);
+        if ($method === 'PUT') $controller->updateSocietyAdmin($matches[1]);
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/approve$/', $uri, $matches) && $method === 'PUT') {
         (new SuperAdminController())->approveSociety($matches[1]);
