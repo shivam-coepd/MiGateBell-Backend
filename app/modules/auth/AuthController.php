@@ -55,7 +55,7 @@ class AuthController extends BaseController
     if (!is_array($data)) {
       Response::error(
         'Invalid JSON body: ' . $lastError
-        . '. Use Body → raw → JSON with a single object (no // comments). Example: {"name":"Test","phone":"9012345678","password":"Pass@123","society_id":1,"role":"resident"}',
+          . '. Use Body → raw → JSON with a single object (no // comments). Example: {"name":"Test","phone":"9012345678","password":"Pass@123","society_id":1,"role":"resident"}',
         400
       );
     }
@@ -84,10 +84,155 @@ class AuthController extends BaseController
     return 'pending_verification';
   }
 
+  // public function register()
+  // {
+  //   try {
+  //     $data = $this->parseJsonBody();
+
+  //     // Validation
+  //     $errors = [];
+  //     if (empty($data['name']))
+  //       $errors[] = 'Name is required';
+  //     if (empty($data['phone']))
+  //       $errors[] = 'Phone is required';
+  //     if (empty($data['password']))
+  //       $errors[] = 'Password is required';
+
+  //     // Only require society_id for non-super_admin roles
+  //     if (empty($data['society_id']) && (!isset($data['role']) || $data['role'] !== 'super_admin')) {
+  //       $errors[] = 'Society ID is required for this role';
+  //     }
+
+  //     if (!empty($errors)) {
+  //       Response::validationError($errors);
+  //     }
+
+  //     $data['phone'] = $this->normalizePhone($data['phone']);
+
+  //     // Email optional in Postman — generate unique placeholder from phone if omitted
+  //     if (empty($data['email'])) {
+  //       $data['email'] = $data['phone'] . '@users.mygatebell.local';
+  //     } else {
+  //       $data['email'] = trim($data['email']);
+  //     }
+
+  //     // Validate phone number format
+  //     if (!preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
+  //       Response::error("Phone number must be 10-15 digits (no spaces or country code prefix)");
+  //     }
+
+  //     // Validate password strength
+  //     if (!empty($data['password']) && strlen($data['password']) < 8) {
+  //       Response::error("Password must be at least 8 characters long");
+  //     }
+
+  //     if (!empty($data['password']) && !preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).+$/', $data['password'])) {
+  //       Response::error("Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character");
+  //     }
+
+  //     // Validate name length
+  //     if (!empty($data['name']) && strlen($data['name']) > 100) {
+  //       Response::error("Name must be less than 100 characters");
+  //     }
+
+  //     // Validate email format
+  //     if (!empty($data['email']) && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+  //       Response::error("Invalid email format");
+  //     }
+
+  //     // Check if email already exists
+  //     if (!empty($data['email'])) {
+  //       $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
+  //       $stmt->execute([$data['email']]);
+  //       if ($stmt->fetch()) {
+  //         Response::error("User with this email already exists", 409);
+  //       }
+  //     }
+
+  //     // Check if society exists when provided
+  //     if (!empty($data['society_id'])) {
+  //       $stmt = $this->db->prepare("SELECT id FROM societies WHERE id = ?");
+  //       $stmt->execute([$data['society_id']]);
+  //       if (!$stmt->fetch()) {
+  //         Response::error("Society not found", 404);
+  //       }
+  //     }
+
+  //     // Check if user already exists
+  //     $stmt = $this->db->prepare("SELECT id FROM users WHERE phone = ?");
+  //     $stmt->execute([$data['phone']]);
+  //     if ($stmt->fetch()) {
+  //       Response::error("User with this phone already exists", 409);
+  //     }
+
+  //     // Hash password
+  //     $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
+
+  //     // Insert user (society_id can be NULL for super_admin)
+  //     $societyId = isset($data['society_id']) ? (int) $data['society_id'] : null;
+  //     if ($societyId === 0) {
+  //       $societyId = null;
+  //     }
+  //     $role = $data['role'] ?? 'resident';
+
+  //     // Validate role against allowed ENUM values
+  //     $allowedRoles = ['admin', 'resident', 'guard', 'staff', 'super_admin'];
+  //     if (!in_array($role, $allowedRoles, true)) {
+  //       Response::error("Invalid role. Allowed values: " . implode(', ', $allowedRoles));
+  //     }
+
+  //     $appUserId = AppUserIdHelper::generateUnique($this->db);
+
+  //     $fields = [
+  //       'app_user_id' => $appUserId,
+  //       'name' => trim($data['name']),
+  //       'email' => $data['email'],
+  //       'phone' => $data['phone'],
+  //       'password' => $hashedPassword,
+  //       'role' => $role,
+  //       'society_id' => $societyId,
+  //       'status' => $this->resolveRegistrationStatus($role, $data['status'] ?? null),
+  //     ];
+
+  //     $columns = implode(', ', array_keys($fields));
+  //     $placeholders = implode(', ', array_fill(0, count($fields), '?')); // Create ?, ?, ... string
+
+  //     $stmt = $this->db->prepare("INSERT INTO users ($columns) VALUES ($placeholders)");
+  //     $stmt->execute(array_values($fields));
+
+  //     $userId = $this->db->lastInsertId();
+
+  //     // Generate token
+  //     $tokenData = [
+  //       'uid' => $userId,
+  //       'role' => $role,
+  //       'exp' => time() + 86400
+  //     ];
+
+  //     // Only include society_id in token if it exists
+  //     if ($societyId !== null) {
+  //       $tokenData['society_id'] = $societyId;
+  //     }
+
+  //     $token = jwt_encode($tokenData);
+
+  //     // Fetch complete user profile for response
+  //     $userProfile = $this->getCompleteUserProfile($userId);
+
+  //     Response::success("Registration successful", [
+  //       'user' => $userProfile,
+  //       'token' => $token
+  //     ], 201);
+
+  //   } catch (Exception $e) {
+  //     error_log("Registration error: " . $e->getMessage());
+  //     Response::error("Registration failed: " . $e->getMessage(), 500);
+  //   }
+  // }
   public function register()
   {
     try {
-      $data = $this->parseJsonBody();
+      $data = json_decode(file_get_contents("php://input"), true);
 
       // Validation
       $errors = [];
@@ -97,6 +242,8 @@ class AuthController extends BaseController
         $errors[] = 'Phone is required';
       if (empty($data['password']))
         $errors[] = 'Password is required';
+      if (empty($data['email']))
+        $errors[] = 'Email is required';
 
       // Only require society_id for non-super_admin roles
       if (empty($data['society_id']) && (!isset($data['role']) || $data['role'] !== 'super_admin')) {
@@ -107,18 +254,9 @@ class AuthController extends BaseController
         Response::validationError($errors);
       }
 
-      $data['phone'] = $this->normalizePhone($data['phone']);
-
-      // Email optional in Postman — generate unique placeholder from phone if omitted
-      if (empty($data['email'])) {
-        $data['email'] = $data['phone'] . '@users.mygatebell.local';
-      } else {
-        $data['email'] = trim($data['email']);
-      }
-
       // Validate phone number format
-      if (!preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
-        Response::error("Phone number must be 10-15 digits (no spaces or country code prefix)");
+      if (!empty($data['phone']) && !preg_match('/^[0-9]{10,15}$/', $data['phone'])) {
+        Response::error("Phone number must be 10-15 digits");
       }
 
       // Validate password strength
@@ -169,15 +307,12 @@ class AuthController extends BaseController
       $hashedPassword = password_hash($data['password'], PASSWORD_DEFAULT);
 
       // Insert user (society_id can be NULL for super_admin)
-      $societyId = isset($data['society_id']) ? (int) $data['society_id'] : null;
-      if ($societyId === 0) {
-        $societyId = null;
-      }
+      $societyId = isset($data['society_id']) ? $data['society_id'] : null;
       $role = $data['role'] ?? 'resident';
 
       // Validate role against allowed ENUM values
       $allowedRoles = ['admin', 'resident', 'guard', 'staff', 'super_admin'];
-      if (!in_array($role, $allowedRoles, true)) {
+      if (!in_array($role, $allowedRoles)) {
         Response::error("Invalid role. Allowed values: " . implode(', ', $allowedRoles));
       }
 
@@ -185,14 +320,17 @@ class AuthController extends BaseController
 
       $fields = [
         'app_user_id' => $appUserId,
-        'name' => trim($data['name']),
+        'name' => $data['name'],
         'email' => $data['email'],
         'phone' => $data['phone'],
         'password' => $hashedPassword,
         'role' => $role,
-        'society_id' => $societyId,
-        'status' => $this->resolveRegistrationStatus($role, $data['status'] ?? null),
+        'society_id' => $societyId
       ];
+
+      if ($role === 'super_admin') {
+        $fields['status'] = 'active';
+      }
 
       $columns = implode(', ', array_keys($fields));
       $placeholders = implode(', ', array_fill(0, count($fields), '?')); // Create ?, ?, ... string
@@ -216,14 +354,11 @@ class AuthController extends BaseController
 
       $token = jwt_encode($tokenData);
 
-      // Fetch complete user profile for response
-      $userProfile = $this->getCompleteUserProfile($userId);
-
       Response::success("Registration successful", [
-        'user' => $userProfile,
+        'user_id' => $userId,
+        'app_user_id' => $appUserId,
         'token' => $token
       ], 201);
-
     } catch (Exception $e) {
       error_log("Registration error: " . $e->getMessage());
       Response::error("Registration failed: " . $e->getMessage(), 500);
@@ -276,7 +411,6 @@ class AuthController extends BaseController
         'user' => $userProfile,
         'token' => $token
       ]);
-
     } catch (Exception $e) {
       error_log("Login error: " . $e->getMessage());
       Response::error("Login failed: " . $e->getMessage(), 500);
@@ -367,8 +501,7 @@ class AuthController extends BaseController
       $stmt = $this->db->prepare("UPDATE users SET password = ? WHERE id = ?");
       $stmt->execute([$hashedPassword, $payload['uid']]);
 
-      Response::success("Password changed successfully", );
-
+      Response::success("Password changed successfully",);
     } catch (Exception $e) {
       error_log("Password change error: " . $e->getMessage());
       Response::error("Password change failed: " . $e->getMessage(), 500);
@@ -402,7 +535,6 @@ class AuthController extends BaseController
       // In a real implementation, we would send an OTP or password reset link
       // For now, we'll just simulate the response
       Response::success("Password reset instructions sent to your phone");
-
     } catch (Exception $e) {
       error_log("Forgot password error: " . $e->getMessage());
       Response::error("Password reset request failed: " . $e->getMessage(), 500);
@@ -461,7 +593,6 @@ class AuthController extends BaseController
       Response::success("User status updated successfully", [
         'status' => $data['status']
       ]);
-
     } catch (Exception $e) {
       error_log("Update user status error: " . $e->getMessage());
       Response::error("Failed to update user status: " . $e->getMessage(), 500);
@@ -498,7 +629,7 @@ class AuthController extends BaseController
 
     // Fetch role-specific data based on user role
     $role = $profile['role'];
-    
+
     switch ($role) {
       case 'resident':
         $profile['resident_data'] = $this->getResidentData($userId);
@@ -579,7 +710,7 @@ class AuthController extends BaseController
   private function getGuardData($userId)
   {
     $data = [];
-    
+
     // Today's visitor statistics
     $stmt = $this->db->prepare("
       SELECT count(*) as today_visitors 
