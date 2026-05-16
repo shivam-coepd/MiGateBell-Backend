@@ -232,7 +232,7 @@ class AuthController extends BaseController
   public function register()
   {
     try {
-      $data = json_decode(file_get_contents("php://input"), true);
+      $data = $this->parseJsonBody();
 
       // Validation
       $errors = [];
@@ -295,6 +295,9 @@ class AuthController extends BaseController
           Response::error("Society not found", 404);
         }
       }
+
+      // Normalize phone number before storing (consistent with login)
+      $data['phone'] = $this->normalizePhone($data['phone']);
 
       // Check if user already exists
       $stmt = $this->db->prepare("SELECT id FROM users WHERE phone = ?");
