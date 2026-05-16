@@ -357,11 +357,14 @@ class AuthController extends BaseController
 
       $token = jwt_encode($tokenData);
 
-      Response::success("Registration successful", [
+      $responseData = [
         'user_id' => $userId,
-        'app_user_id' => $appUserId,
         'token' => $token
-      ], 201);
+      ];
+      if (isset($hasAppUserId) && $hasAppUserId && isset($appUserId)) {
+        $responseData['app_user_id'] = $appUserId;
+      }
+      Response::success("Registration successful", $responseData, 201);
     } catch (Exception $e) {
       error_log("Registration error: " . $e->getMessage());
       Response::error("Registration failed: " . $e->getMessage(), 500);
@@ -380,11 +383,19 @@ class AuthController extends BaseController
 
       $phone = $this->normalizePhone($data['phone']);
 
-      // Get user
-      $stmt = $this->db->prepare(
-        "SELECT id, app_user_id, name, phone, password, role, society_id 
-     FROM users WHERE phone = ?"
-      );
+      // Get user - handle missing app_user_id column gracefully
+      try {
+        $stmt = $this->db->prepare(
+          "SELECT id, app_user_id, name, phone, password, role, society_id 
+       FROM users WHERE phone = ?"
+        );
+      } catch (Exception $e) {
+        // Fallback if app_user_id column doesn't exist
+        $stmt = $this->db->prepare(
+          "SELECT id, name, phone, password, role, society_id 
+       FROM users WHERE phone = ?"
+        );
+      }
 
       $stmt->execute([$phone]);
       $user = $stmt->fetch();
@@ -609,13 +620,23 @@ class AuthController extends BaseController
    */
   private function getCompleteUserProfile($userId)
   {
-    // Fetch basic user details
-    $stmt = $this->db->prepare("
-      SELECT id, app_user_id, name, email, phone, role, society_id, profile_image, 
-             cover_image_url, resident_type, bio, profession, hometown, status, created_at, updated_at
-      FROM users 
-      WHERE id = ?
-    ");
+    // Fetch basic user details - handle missing app_user_id column gracefully
+    try {
+      $stmt = $this->db->prepare("
+        SELECT id, app_user_id, name, email, phone, role, society_id, profile_image, 
+               cover_image_url, resident_type, bio, profession, hometown, status, created_at, updated_at
+        FROM users 
+        WHERE id = ?
+      ");
+    } catch (Exception $e) {
+      // Fallback if app_user_id column doesn't exist
+      $stmt = $this->db->prepare("
+        SELECT id, name, email, phone, role, society_id, profile_image, 
+               cover_image_url, resident_type, bio, profession, hometown, status, created_at, updated_at
+        FROM users 
+        WHERE id = ?
+      ");
+    }
     $stmt->execute([$userId]);
     $profile = $stmt->fetch();
 
