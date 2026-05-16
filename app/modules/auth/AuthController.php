@@ -383,21 +383,22 @@ class AuthController extends BaseController
 
       $phone = $this->normalizePhone($data['phone']);
 
-      // Get user - handle missing app_user_id column gracefully
+      // Get user - handle missing app_user_id column and multiple phone formats
       try {
         $stmt = $this->db->prepare(
-          "SELECT id, app_user_id, name, phone, password, role, society_id 
-       FROM users WHERE phone = ?"
+          "SELECT id, app_user_id, name, phone, password, role, society_id
+       FROM users WHERE phone = ? OR phone = ? OR phone = ?"
         );
       } catch (Exception $e) {
         // Fallback if app_user_id column doesn't exist
         $stmt = $this->db->prepare(
-          "SELECT id, name, phone, password, role, society_id 
-       FROM users WHERE phone = ?"
+          "SELECT id, name, phone, password, role, society_id
+       FROM users WHERE phone = ? OR phone = ? OR phone = ?"
         );
       }
 
-      $stmt->execute([$phone]);
+      // Try multiple phone formats: normalized, with +91, with 91
+      $stmt->execute([$phone, '+91' . $phone, '91' . $phone]);
       $user = $stmt->fetch();
 
       if (!$user || !password_verify($data['password'], $user['password'])) {

@@ -139,15 +139,14 @@ class SuperAdminController extends BaseController
         }
     }
 
-    /** Normalize a phone number to E.164 format (+91XXXXXXXXXX for Indian numbers). */
+    /** Normalize phone number - strip non-digits and remove 91 prefix (consistent with AuthController) */
     private function normalizePhone(string $phone): string
     {
-        $clean = preg_replace('/[^\d+]/', '', $phone);
-        if (substr($clean, 0, 1) !== '+' && preg_match('/^\d{10}$/', preg_replace('/\D/', '', $clean))) {
-            $clean = '+91' . preg_replace('/\D/', '', $clean);
+        $digits = preg_replace('/\D/', '', $phone);
+        if (strlen($digits) === 12 && substr($digits, 0, 2) === '91') {
+            $digits = substr($digits, 2);
         }
-        $digits = ltrim($clean, '+');
-        return preg_match('/^\d{8,15}$/', $digits) ? '+' . $digits : $phone;
+        return $digits;
     }
 
     /**
