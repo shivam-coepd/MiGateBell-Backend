@@ -31,11 +31,20 @@ class UserController extends BaseController
                 Response::notFound("User not found");
             }
 
+            if ($profile['role'] === 'admin') {
+                $linkedSocId = $this->autoLinkAdminSociety($userId);
+                if ($linkedSocId) {
+                    $profile['society_id'] = $linkedSocId;
+                }
+            }
+
             // Fetch society details if applicable
             if ($profile['society_id']) {
-                $stmt = $this->db->prepare("SELECT name, address, city, state FROM societies WHERE id = ?");
+                $stmt = $this->db->prepare("SELECT id, name, code, address, city, state FROM societies WHERE id = ?");
                 $stmt->execute([$profile['society_id']]);
                 $profile['society'] = $stmt->fetch();
+                $profile['society_name'] = $profile['society']['name'] ?? null;
+                $profile['society_code'] = $profile['society']['code'] ?? null;
             }
 
             // Role specific data

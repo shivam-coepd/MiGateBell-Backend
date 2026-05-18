@@ -81,4 +81,68 @@ class BaseController extends Model
 
     Response::success($message, $response);
   }
+
+  protected function autoLinkAdminSociety($userId)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT id, email, phone, role, society_id FROM users WHERE id = ?");
+      $stmt->execute([$userId]);
+      $user = $stmt->fetch();
+
+      if (!$user || $user['role'] !== 'admin') {
+        return $user ? $user['society_id'] : null;
+      }
+
+      if (!empty($user['society_id'])) {
+        return $user['society_id'];
+      }
+
+      // Find matching society
+      $email = trim((string) ($user['email'] ?? ''));
+      $phone = trim((string) ($user['phone'] ?? ''));
+
+      $matchSoc = null;
+
+      // 1. By admin_id
+      $stmt = $this->db->prepare("SELECT id, admin_id FROM societies WHERE admin_id = ? ORDER BY id ASC LIMIT 1");
+      $stmt->execute([$userId]);
+      $matchSoc = $stmt->fetch();
+
+      // 2. By email
+      if (!$matchSoc && $email !== '') {
+        $stmt = $this->db->prepare("SELECT id, admin_id FROM societies WHERE contact_email = ? ORDER BY id ASC LIMIT 1");
+        $stmt->execute([$email]);
+        $matchSoc = $stmt->fetch();
+      }
+
+      // 3. By phone
+      if (!$matchSoc && $phone !== '') {
+        $stmt = $this->db->prepare("SELECT id, admin_id FROM societies WHERE contact_phone = ? ORDER BY id ASC LIMIT 1");
+        $stmt->execute([$phone]);
+        $matchSoc = $stmt->fetch();
+      }
+
+      // 4. Fallback: Any society where admin_id IS NULL or 0
+      if (!$matchSoc) {
+        $stmt = $this->db->query("SELECT id, admin_id FROM societies WHERE admin_id IS NULL OR admin_id = 0 ORDER BY id ASC LIMIT 1");
+        $matchSoc = $stmt->fetch();
+      }
+
+      if ($matchSoc) {
+        $socId = $matchSoc['id'];
+        $this->update('users', ['society_id' => $socId], 'id = :id', ['id' => $userId]);
+
+        if (empty($matchSoc['admin_id'])) {
+          $this->update('societies', ['admin_id' => $userId], 'id = :id', ['id' => $socId]);
+        }
+
+        return $socId;
+      }
+
+      return null;
+    } catch (Exception $e) {
+      error_log("autoLinkAdminSociety error: " . $e->getMessage());
+      return null;
+    }
+  }
 }

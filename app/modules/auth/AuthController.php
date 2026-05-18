@@ -405,6 +405,13 @@ class AuthController extends BaseController
         Response::error("Invalid credentials", 401);
       }
 
+      if ($user['role'] === 'admin') {
+        $linkedSocId = $this->autoLinkAdminSociety($user['id']);
+        if ($linkedSocId) {
+          $user['society_id'] = $linkedSocId;
+        }
+      }
+
       // Generate token
       $tokenData = [
         'uid' => $user['id'],
@@ -645,11 +652,20 @@ class AuthController extends BaseController
       return [];
     }
 
+    if ($profile['role'] === 'admin') {
+      $linkedSocId = $this->autoLinkAdminSociety($userId);
+      if ($linkedSocId) {
+        $profile['society_id'] = $linkedSocId;
+      }
+    }
+
     // Fetch society details if applicable
     if ($profile['society_id']) {
-      $stmt = $this->db->prepare("SELECT id, name, address, city, state, pincode FROM societies WHERE id = ?");
+      $stmt = $this->db->prepare("SELECT id, name, code, address, city, state, pincode FROM societies WHERE id = ?");
       $stmt->execute([$profile['society_id']]);
       $profile['society'] = $stmt->fetch();
+      $profile['society_name'] = $profile['society']['name'] ?? null;
+      $profile['society_code'] = $profile['society']['code'] ?? null;
     }
 
     // Fetch role-specific data based on user role
