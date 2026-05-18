@@ -708,7 +708,7 @@ class AdminController extends BaseController
       }
 
       $stmt = $this->db->prepare("
-        SELECT f.id, f.flat_number, f.floor_number, f.area_sqft, f.building_id,
+        SELECT f.id, f.flat_number, f.flat_type, f.floor_number, f.area_sqft, f.building_id,
                f.owner_id, f.tenant_id, f.society_id, f.is_occupied, f.created_at,
                b.name AS building_name,
                owner.name AS owner_name, owner.phone AS owner_phone,
@@ -765,7 +765,7 @@ class AdminController extends BaseController
 
       // Get flats for building that are not occupied
       $stmt = $this->db->prepare("
-        SELECT id, flat_number, floor_number, area_sqft
+        SELECT id, flat_number, flat_type, floor_number, area_sqft
         FROM flats 
         WHERE building_id = ? AND (is_occupied = 0 OR is_occupied IS NULL)
         ORDER BY floor_number, flat_number
@@ -782,7 +782,7 @@ class AdminController extends BaseController
         ],
         'flats' => $flats
       ]);
-
+      
     } catch (Exception $e) {
       error_log("Get flats error: " . $e->getMessage());
       Response::error("Failed to retrieve flats: " . $e->getMessage(), 500);
@@ -801,6 +801,17 @@ class AdminController extends BaseController
       $errors = $this->validateRequiredFields($data, ['building_id']);
       if (!empty($errors)) {
         Response::validationError($errors);
+      }
+
+      // Validation: flat_type if provided (optional — defaults to '2BHK')
+      $validFlatTypes = ['1RK', '1BHK', '2BHK', '3BHK', '4BHK', '4BHK+'];
+      $flatTypeGlobal = null;
+      if (isset($data['flat_type'])) {
+        if (in_array($data['flat_type'], $validFlatTypes)) {
+          $flatTypeGlobal = $data['flat_type'];
+        } else {
+          Response::error("Invalid flat_type. Allowed: " . implode(', ', $validFlatTypes));
+        }
       }
 
       // Check if building exists and get society_id
@@ -822,6 +833,87 @@ class AdminController extends BaseController
         $this->auth->authorizeWithSociety($building['society_id']);
       }
 
+      // ---- Owner data handling: create user if owner details provided ----
+      $ownerId = null;
+      if (isset($data['owner'])) {
+        $ownerData = $data['owner'];
+
+        // Validate required owner fields
+        $ownerErrors = [];
+        if (empty($ownerData['name']))    $ownerErrors[] = "Owner name is required";
+        if (empty($ownerData['phone']))   $ownerErrors[] = "Owner phone is required";
+        if (empty($ownerData['password'])) $ownerErrors[] = "Owner password is required";
+        if (!empty($ownerErrors)) {
+          Response::validationError($ownerErrors);
+        }
+
+        // Validate owner role
+        $ownerRole = $ownerData['role'] ?? 'resident';
+
+        // Validate phone format
+        $rawPhone = preg_replace('/[^\d+]/', '', trim($ownerData['phone']));
+        if (preg_match('/^(\d{10})$/', $rawPhone)) {
+          $normalizedPhone = '+91' . $rawPhone;
+        } else {
+          $normalizedPhone = $rawPhone;
+        }
+
+        // Check if phone already exists in users table
+        $stmt = $this->db->prepare("SELECT id FROM users WHERE phone = ?");
+        $stmt->execute([$normalizedPhone]);
+        if ($stmt->fetch()) {
+          Response::error("A user with this phone number already exists", 409);
+        }
+
+        // Check if email already exists
+        if (!empty($ownerData['email'])) {
+          $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
+          $stmt->execute([$ownerData['email']]);
+          if ($stmt->fetch()) {
+            Response::error("A user with this email already exists", 409);
+          }
+        }
+
+        // Check if name already exists
+        if (!empty($ownerData['name'])) {
+          $stmt = $this->db->prepare("SELECT id FROM users WHERE name = ? AND society_id = ?");
+          $stmt->execute([$ownerData['name'], $building['society_id']]);
+          if ($stmt->fetch()) {
+            Response::error("A user with this name already exists in this society", 409);
+          }
+        }
+
+        // Generate app_user_id
+        $appUserId = 'USR-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
+
+        // Hash password
+        $hashedPassword = password_hash($ownerData['password'], PASSWORD_BCRYPT);
+
+        // Default status
+        $ownerStatus = 'active';
+
+        // Insert owner into users table — only users table columns, nothing skipped
+        $ownerId = $this->insert('users', [
+          'app_user_id'    => $appUserId,
+          'name'           => $ownerData['name'],
+          'email'          => $ownerData['email'] ?? null,
+          'phone'          => $normalizedPhone,
+          'password'       => $hashedPassword,
+          'role'           => $ownerRole,
+          'society_id'     => (int)$building['society_id'],
+          'profile_image'  => $ownerData['profile_image'] ?? null,
+          'status'         => $ownerStatus,
+          'cover_image_url'         => $ownerData['cover_image_url'] ?? null,
+          'resident_type'           => $ownerData['resident_type'] ?? null,
+          'bio'                     => $ownerData['bio'] ?? null,
+          'profession'              => $ownerData['profession'] ?? null,
+          'hometown'                => $ownerData['hometown'] ?? null,
+          'google_id'               => $ownerData['google_id'] ?? null,
+          'facebook_id'             => $ownerData['facebook_id'] ?? null,
+        ]);
+      }
+
+      // ---- Flat creation ----
       $createdFlats = [];
 
       // Handle bulk creation based on floors and flats per floor
@@ -839,18 +931,28 @@ class AdminController extends BaseController
             $flatNumber = $floorNumber . str_pad($i, 2, '0', STR_PAD_LEFT);
 
             $flatId = $this->insert('flats', [
-              'building_id' => $data['building_id'],
-              'flat_number' => $flatNumber,
-              'floor_number' => $floorNumber,
-              'area_sqft' => $floorData['area_sqft'] ?? null,
-              'society_id' => $building['society_id']
+              'building_id'        => $data['building_id'],
+              'flat_number'        => $flatNumber,
+              'flat_type'          => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+              'floor_number'       => $floorNumber,
+              'area_sqft'          => $floorData['area_sqft'] ?? null,
+              'owner_id'           => $ownerId,
+              'society_id'         => $building['society_id'],
+              'is_occupied'        => $ownerId ? 1 : 0,
+              'user_role'          => 'owner',
+              'occupancy_status'   => $ownerId ? 'residing' : null,
+              'verification_status'=> 'pending',
+              'tenant_id'          => null,
+              'document_url'       => null,
             ]);
 
             $createdFlats[] = [
-              'id' => $flatId,
-              'flat_number' => $flatNumber,
-              'floor_number' => $floorNumber,
-              'area_sqft' => $floorData['area_sqft'] ?? null
+              'id'         => $flatId,
+              'flat_number'=> $flatNumber,
+              'flat_type'  => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+              'floor_number'=>$floorNumber,
+              'area_sqft'  => $floorData['area_sqft'] ?? null,
+              'owner_id'   => $ownerId
             ];
           }
         }
@@ -869,18 +971,28 @@ class AdminController extends BaseController
           }
 
           $flatId = $this->insert('flats', [
-            'building_id' => $data['building_id'],
-            'flat_number' => $flatData['flat_number'],
-            'floor_number' => $flatData['floor_number'] ?? '',
-            'area_sqft' => $flatData['area_sqft'] ?? null,
-            'society_id' => $building['society_id']
+            'building_id'        => $data['building_id'],
+            'flat_number'        => $flatData['flat_number'],
+            'flat_type'          => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+            'floor_number'       => $flatData['floor_number'] ?? '',
+            'area_sqft'          => $flatData['area_sqft'] ?? null,
+            'owner_id'           => $ownerId,
+            'society_id'         => $building['society_id'],
+            'is_occupied'        => $ownerId ? 1 : 0,
+            'user_role'          => 'owner',
+            'occupancy_status'   => $ownerId ? 'residing' : null,
+            'verification_status'=> 'pending',
+            'tenant_id'          => null,
+            'document_url'       => null,
           ]);
 
           $createdFlats[] = [
-            'id' => $flatId,
+            'id'          => $flatId,
             'flat_number' => $flatData['flat_number'],
-            'floor_number' => $flatData['floor_number'] ?? '',
-            'area_sqft' => $flatData['area_sqft'] ?? null
+            'flat_type'   => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+            'floor_number'=> $flatData['floor_number'] ?? '',
+            'area_sqft'   => $flatData['area_sqft'] ?? null,
+            'owner_id'    => $ownerId
           ];
         }
       } else {
@@ -894,6 +1006,9 @@ class AdminController extends BaseController
           'society_id' => $building['society_id'],
           'society_name' => $building['society_name']
         ],
+        'owner' => $ownerId ? [
+          'owner_id' => $ownerId
+        ] : null,
         'flats' => $createdFlats
       ], 201);
 
