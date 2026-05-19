@@ -3,117 +3,199 @@ require_once __DIR__ . '/../../core/BaseController.php';
 
 class AdminController extends BaseController
 {
-  public function createSociety()
-  {
-    try {
-      // Only super admins can create societies
-      $user = $this->auth->authorize('super_admin');
+   public function createSociety()
+   {
+     try {
+       // Only super admins can create societies
+       $user = $this->auth->authorize('super_admin');
 
-      $data = json_decode(file_get_contents("php://input"), true);
+       $data = json_decode(file_get_contents("php://input"), true);
 
-      // Validation: Required fields
-      $errors = $this->validateRequiredFields($data, ['name', 'address']);
-      if (!empty($errors)) {
-        Response::validationError($errors);
-      }
+       // Validation: Required fields
+       $errors = $this->validateRequiredFields($data, ['name', 'address']);
+       if (!empty($errors)) {
+         Response::validationError($errors);
+       }
 
-      // Validate plan if provided
-      if (isset($data['plan'])) {
-        $allowedPlans = ['starter', 'professional', 'enterprise'];
-        if (!in_array($data['plan'], $allowedPlans)) {
-          Response::error("Invalid plan. Allowed values: " . implode(', ', $allowedPlans));
-        }
-      }
-      $plan = $data['plan'] ?? 'starter'; // Default to starter
+       // Validate plan if provided
+       if (isset($data['plan'])) {
+         $allowedPlans = ['starter', 'professional', 'enterprise'];
+         if (!in_array($data['plan'], $allowedPlans)) {
+           Response::error("Invalid plan. Allowed values: " . implode(', ', $allowedPlans));
+         }
+       }
+       $plan = $data['plan'] ?? 'starter'; // Default to starter
 
-      // Check if society with same name already exists
-      $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
-      $stmt->execute([$data['name']]);
-      if ($stmt->fetch()) {
-        Response::error("A society with this name already exists", 409);
-      }
+       // Check if society with same name already exists
+       $stmt = $this->db->prepare("SELECT id FROM societies WHERE name = ?");
+       $stmt->execute([$data['name']]);
+       if ($stmt->fetch()) {
+         Response::error("A society with this name already exists", 409);
+       }
 
-      // Validate and normalize contact_phone (most important change)
-      $normalizedPhone = null;
-      if (!empty($data['contact_phone'])) {
-        $originalPhone = trim($data['contact_phone']);
+       // Validate and normalize contact_phone (most important change)
+       $normalizedPhone = null;
+       if (!empty($data['contact_phone'])) {
+         $originalPhone = trim($data['contact_phone']);
 
-        // Remove all non-digit characters except leading +
-        $cleanPhone = preg_replace('/[^\d+]/', '', $originalPhone);
+         // Remove all non-digit characters except leading +
+         $cleanPhone = preg_replace('/[^\d+]/', '', $originalPhone);
 
-        // Ensure it starts with +, add if missing and possible
-        if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
-          // Assume Indian number if 10 digits and no country code
-          if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
-            $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
-          } else {
-            // For other cases, require + explicitly or reject
-            if (substr($originalPhone, 0, 1) !== '+') {
-              Response::error("International phone numbers must start with country code (e.g., +1, +44)");
-            }
-          }
-        }
+         // Ensure it starts with +, add if missing and possible
+         if (substr($cleanPhone, 0, 1) !== '+' && strlen(preg_replace('/\D/', '', $cleanPhone)) >= 10) {
+           // Assume Indian number if 10 digits and no country code
+           if (preg_match('/^(\d{10})$/', preg_replace('/\D/', '', $cleanPhone))) {
+             $cleanPhone = '+91' . preg_replace('/\D/', '', $cleanPhone);
+           } else {
+             // For other cases, require + explicitly or reject
+             if (substr($originalPhone, 0, 1) !== '+') {
+               Response::error("International phone numbers must start with country code (e.g., +1, +44)");
+             }
+           }
+         }
 
-        // Extract only digits after +
-        $digitsOnly = ltrim($cleanPhone, '+');
-        if (!preg_match('/^\d{8,15}$/', $digitsOnly)) {
-          Response::error("Phone number must have 8 to 15 digits after country code");
-        }
+         // Extract only digits after +
+         $digitsOnly = ltrim($cleanPhone, '+');
+         if (!preg_match('/^\d{8,15}$/', $digitsOnly)) {
+           Response::error("Phone number must have 8 to 15 digits after country code");
+         }
 
-        // Final E.164 format
-        $normalizedPhone = '+' . $digitsOnly;
+         // Final E.164 format
+         $normalizedPhone = '+' . $digitsOnly;
 
-        // Check uniqueness using normalized format
-        $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_phone = ?");
-        $stmt->execute([$normalizedPhone]);
-        if ($stmt->fetch()) {
-          Response::error("A society with this contact phone already exists", 409);
-        }
-      }
+         // Check uniqueness using normalized format
+         $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_phone = ?");
+         $stmt->execute([$normalizedPhone]);
+         if ($stmt->fetch()) {
+           Response::error("A society with this contact phone already exists", 409);
+         }
+       }
 
-      // Validate email format
-      if (!empty($data['contact_email']) && !filter_var($data['contact_email'], FILTER_VALIDATE_EMAIL)) {
-        Response::error("Invalid email format");
-      }
+       // Validate email format
+       if (!empty($data['contact_email']) && !filter_var($data['contact_email'], FILTER_VALIDATE_EMAIL)) {
+         Response::error("Invalid email format");
+       }
 
-      // Email uniqueness
-      if (!empty($data['contact_email'])) {
-        $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_email = ?");
-        $stmt->execute([$data['contact_email']]);
-        if ($stmt->fetch()) {
-          Response::error("A society with this contact email already exists", 409);
-        }
-      }
+       // Email uniqueness
+       if (!empty($data['contact_email'])) {
+         $stmt = $this->db->prepare("SELECT id FROM societies WHERE contact_email = ?");
+         $stmt->execute([$data['contact_email']]);
+         if ($stmt->fetch()) {
+           Response::error("A society with this contact email already exists", 409);
+         }
+       }
 
-      // Pincode: Make optional and flexible (international support)
-      if (!empty($data['pincode'])) {
-        // Allow alphanumeric and spaces (for UK, Canada, etc.), max 12 chars
-        if (strlen($data['pincode']) > 12 || !preg_match('/^[A-Za-z0-9\s-]+$/', $data['pincode'])) {
-          Response::error("Invalid pincode/postal code format");
-        }
-      }
+       // Pincode: Make optional and flexible (international support)
+       if (!empty($data['pincode'])) {
+         // Allow alphanumeric and spaces (for UK, Canada, etc.), max 12 chars
+         if (strlen($data['pincode']) > 12 || !preg_match('/^[A-Za-z0-9\s-]+$/', $data['pincode'])) {
+           Response::error("Invalid pincode/postal code format");
+         }
+       }
 
-      // Insert society — store normalized phone
-      $societyId = $this->insert('societies', [
-        'name' => $data['name'],
-        'address' => $data['address'],
-        'city' => $data['city'] ?? '',
-        'state' => $data['state'] ?? '',
-        'country' => $data['country'] ?? '',
-        'pincode' => $data['pincode'] ?? '',
-        'contact_person' => $data['contact_person'] ?? '',
-        'contact_phone' => $normalizedPhone,  // Stored in E.164 format
-        'contact_email' => $data['contact_email'] ?? '',
-        'plan' => $plan
-      ]);
+       // Insert society — store normalized phone
+       $societyId = $this->insert('societies', [
+         'name' => $data['name'],
+         'address' => $data['address'],
+         'city' => $data['city'] ?? '',
+         'state' => $data['state'] ?? '',
+         'country' => $data['country'] ?? '',
+         'pincode' => $data['pincode'] ?? '',
+         'contact_person' => $data['contact_person'] ?? '',
+         'contact_phone' => $normalizedPhone,  // Stored in E.164 format
+         'contact_email' => $data['contact_email'] ?? '',
+         'plan' => $plan
+       ]);
 
-      Response::success("Society created successfully", ['society_id' => $societyId], 201);
+       Response::success("Society created successfully", ['society_id' => $societyId], 201);
 
-    } catch (Exception $e) {
-      error_log("Create society error: " . $e->getMessage());
-      Response::error("Failed to create society: " . $e->getMessage(), 500);
-    }
-  }
+     } catch (Exception $e) {
+       error_log("Create society error: " . $e->getMessage());
+       Response::error("Failed to create society: " . $e->getMessage(), 500);
+     }
+   }
+
+   private function createUserFromData($userData, $societyId)
+   {
+     // Validate required fields: name, phone
+     $errors = [];
+     if (empty($userData['name']))    $errors[] = "Name is required";
+     if (empty($userData['phone']))   $errors[] = "Phone is required";
+     if (!empty($errors)) {
+         Response::validationError($errors);
+     }
+
+     // Validate phone format and normalize
+     $rawPhone = preg_replace('/[^\d+]/', '', trim($userData['phone']));
+     if (preg_match('/^(\d{10})$/', $rawPhone)) {
+         $normalizedPhone = '+91' . $rawPhone;
+     } else {
+         $normalizedPhone = $rawPhone;
+     }
+
+     // Check if phone already exists in users table
+     $stmt = $this->db->prepare("SELECT id FROM users WHERE phone = ?");
+     $stmt->execute([$normalizedPhone]);
+     if ($stmt->fetch()) {
+         Response::error("A user with this phone number already exists", 409);
+     }
+
+     // Check if email already exists
+     if (!empty($userData['email'])) {
+         $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
+         $stmt->execute([$userData['email']]);
+         if ($stmt->fetch()) {
+             Response::error("A user with this email already exists", 409);
+         }
+     }
+
+     // Check if name already exists in this society
+     if (!empty($userData['name'])) {
+         $stmt = $this->db->prepare("SELECT id FROM users WHERE name = ? AND society_id = ?");
+         $stmt->execute([$userData['name'], $societyId]);
+         if ($stmt->fetch()) {
+             Response::error("A user with this name already exists in this society", 409);
+         }
+     }
+
+     // Generate app_user_id
+     $appUserId = 'USR-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
+
+     // Hash password: if password is empty, generate a temporary one
+     $password = $userData['password'] ?? '';
+     if (empty($password)) {
+         // Generate a temporary password
+         $password = substr(bin2hex(random_bytes(8)), 0, 8); // 8 hex characters
+     }
+     $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+
+     // Default status
+     $userStatus = 'active';
+
+     // Insert user
+     $userId = $this->insert('users', [
+         'app_user_id'    => $appUserId,
+         'name'           => $userData['name'],
+         'email'          => $userData['email'] ?? null,
+         'phone'          => $normalizedPhone,
+         'password'       => $hashedPassword,
+         'role'           => $userData['role'] ?? 'resident',
+         'society_id'     => $societyId,
+         'profile_image'  => $userData['profile_image'] ?? null,
+         'status'         => $userStatus,
+         'cover_image_url'         => $userData['cover_image_url'] ?? null,
+         'resident_type'           => $userData['resident_type'] ?? null,
+         'bio'                     => $userData['bio'] ?? null,
+         'profession'              => $userData['profession'] ?? null,
+         'hometown'                => $userData['hometown'] ?? null,
+         'google_id'               => $userData['google_id'] ?? null,
+         'facebook_id'             => $userData['facebook_id'] ?? null,
+     ]);
+
+     return $userId;
+   }
+
+
 
   public function getSocieties()
   {
@@ -833,171 +915,123 @@ class AdminController extends BaseController
         $this->auth->authorizeWithSociety($building['society_id']);
       }
 
-      // ---- Owner data handling: create user if owner details provided ----
-      $ownerId = null;
-      if (isset($data['owner'])) {
-        $ownerData = $data['owner'];
-
-        // Validate required owner fields
-        $ownerErrors = [];
-        if (empty($ownerData['name']))    $ownerErrors[] = "Owner name is required";
-        if (empty($ownerData['phone']))   $ownerErrors[] = "Owner phone is required";
-        if (empty($ownerData['password'])) $ownerErrors[] = "Owner password is required";
-        if (!empty($ownerErrors)) {
-          Response::validationError($ownerErrors);
-        }
-
-        // Validate owner role
-        $ownerRole = $ownerData['role'] ?? 'resident';
-
-        // Validate phone format
-        $rawPhone = preg_replace('/[^\d+]/', '', trim($ownerData['phone']));
-        if (preg_match('/^(\d{10})$/', $rawPhone)) {
-          $normalizedPhone = '+91' . $rawPhone;
-        } else {
-          $normalizedPhone = $rawPhone;
-        }
-
-        // Check if phone already exists in users table
-        $stmt = $this->db->prepare("SELECT id FROM users WHERE phone = ?");
-        $stmt->execute([$normalizedPhone]);
-        if ($stmt->fetch()) {
-          Response::error("A user with this phone number already exists", 409);
-        }
-
-        // Check if email already exists
-        if (!empty($ownerData['email'])) {
-          $stmt = $this->db->prepare("SELECT id FROM users WHERE email = ?");
-          $stmt->execute([$ownerData['email']]);
-          if ($stmt->fetch()) {
-            Response::error("A user with this email already exists", 409);
-          }
-        }
-
-        // Check if name already exists
-        if (!empty($ownerData['name'])) {
-          $stmt = $this->db->prepare("SELECT id FROM users WHERE name = ? AND society_id = ?");
-          $stmt->execute([$ownerData['name'], $building['society_id']]);
-          if ($stmt->fetch()) {
-            Response::error("A user with this name already exists in this society", 409);
-          }
-        }
-
-        // Generate app_user_id
-        $appUserId = 'USR-' . strtoupper(substr(md5(uniqid(mt_rand(), true)), 0, 6));
-
-        // Hash password
-        $hashedPassword = password_hash($ownerData['password'], PASSWORD_BCRYPT);
-
-        // Default status
-        $ownerStatus = 'active';
-
-        // Insert owner into users table — only users table columns, nothing skipped
-        $ownerId = $this->insert('users', [
-          'app_user_id'    => $appUserId,
-          'name'           => $ownerData['name'],
-          'email'          => $ownerData['email'] ?? null,
-          'phone'          => $normalizedPhone,
-          'password'       => $hashedPassword,
-          'role'           => $ownerRole,
-          'society_id'     => (int)$building['society_id'],
-          'profile_image'  => $ownerData['profile_image'] ?? null,
-          'status'         => $ownerStatus,
-          'cover_image_url'         => $ownerData['cover_image_url'] ?? null,
-          'resident_type'           => $ownerData['resident_type'] ?? null,
-          'bio'                     => $ownerData['bio'] ?? null,
-          'profession'              => $ownerData['profession'] ?? null,
-          'hometown'                => $ownerData['hometown'] ?? null,
-          'google_id'               => $ownerData['google_id'] ?? null,
-          'facebook_id'             => $ownerData['facebook_id'] ?? null,
-        ]);
-      }
+       // ---- Owner/Tenant data handling: create user if details provided ----
+       $ownerId = null;
+       $tenantId = null;
+       
+       // Handle owner type if provided
+       if (isset($data['owner_type'])) {
+         switch ($data['owner_type']) {
+           case 'Owner':
+             if (isset($data['owner'])) {
+               $ownerId = $this->createUserFromData($data['owner'], $building['society_id']);
+             }
+             break;
+           case 'Tenant':
+             if (isset($data['tenant'])) {
+               $tenantId = $this->createUserFromData($data['tenant'], $building['society_id']);
+             }
+             break;
+           default:
+             Response::error("Invalid owner type");
+         }
+       } else {
+         // Legacy handling for backward compatibility
+         if (isset($data['owner'])) {
+           $ownerId = $this->createUserFromData($data['owner'], $building['society_id']);
+         }
+         if (isset($data['tenant'])) {
+           $tenantId = $this->createUserFromData($data['tenant'], $building['society_id']);
+         }
+       }
 
       // ---- Flat creation ----
       $createdFlats = [];
 
-      // Handle bulk creation based on floors and flats per floor
-      if (isset($data['floors']) && is_array($data['floors'])) {
-        // Create flats based on floor configuration
-        foreach ($data['floors'] as $floorData) {
-          if (empty($floorData['floor_number']) || empty($floorData['flats'])) {
-            continue;
-          }
+       // Handle bulk creation based on floors and flats per floor
+       if (isset($data['floors']) && is_array($data['floors'])) {
+         // Create flats based on floor configuration
+         foreach ($data['floors'] as $floorData) {
+           if (empty($floorData['floor_number']) || empty($floorData['flats'])) {
+             continue;
+           }
+ 
+           $floorNumber = $floorData['floor_number'];
+           $flatsPerFloor = $floorData['flats'];
+ 
+           for ($i = 1; $i <= $flatsPerFloor; $i++) {
+             $flatNumber = $floorNumber . str_pad($i, 2, '0', STR_PAD_LEFT);
+ 
+             $flatId = $this->insert('flats', [
+               'building_id'        => $data['building_id'],
+               'flat_number'        => $flatNumber,
+               'flat_type'          => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+               'floor_number'       => $floorNumber,
+               'area_sqft'          => $floorData['area_sqft'] ?? null,
+               'owner_id'           => $ownerId,
+               'tenant_id'          => $tenantId,
+               'society_id'         => $building['society_id'],
+               'is_occupied'        => ($ownerId || $tenantId) ? 1 : 0,
+               'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : null)),
+               'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : null,
+               'verification_status'=> 'pending',
+               'document_url'       => null,
+             ]);
+ 
+             $createdFlats[] = [
+               'id'         => $flatId,
+               'flat_number'=> $flatNumber,
+               'flat_type'  => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+               'floor_number'=>$floorNumber,
+               'area_sqft'  => $floorData['area_sqft'] ?? null,
+               'owner_id'   => $ownerId,
+               'tenant_id'  => $tenantId
+             ];
+           }
+         }
+       }
+       // Handle explicit flats list
+       else if (isset($data['flats']) && is_array($data['flats'])) {
+         if (empty($data['flats'])) {
+           Response::error("Flats data must be a non-empty array");
+         }
 
-          $floorNumber = $floorData['floor_number'];
-          $flatsPerFloor = $floorData['flats'];
+         // Insert flats
+         foreach ($data['flats'] as $flatData) {
+           // Validate required fields for each flat
+           if (empty($flatData['flat_number'])) {
+             Response::error("Each flat must have a flat_number");
+           }
 
-          for ($i = 1; $i <= $flatsPerFloor; $i++) {
-            $flatNumber = $floorNumber . str_pad($i, 2, '0', STR_PAD_LEFT);
+           $flatId = $this->insert('flats', [
+             'building_id'        => $data['building_id'],
+             'flat_number'        => $flatData['flat_number'],
+             'flat_type'          => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+             'floor_number'       => $flatData['floor_number'] ?? '',
+             'area_sqft'          => $flatData['area_sqft'] ?? null,
+             'owner_id'           => $ownerId,
+             'tenant_id'          => $tenantId,
+             'society_id'         => $building['society_id'],
+             'is_occupied'        => ($ownerId || $tenantId) ? 1 : 0,
+             'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : null)),
+             'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : null,
+             'verification_status'=> 'pending',
+             'document_url'       => null,
+           ]);
 
-            $flatId = $this->insert('flats', [
-              'building_id'        => $data['building_id'],
-              'flat_number'        => $flatNumber,
-              'flat_type'          => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
-              'floor_number'       => $floorNumber,
-              'area_sqft'          => $floorData['area_sqft'] ?? null,
-              'owner_id'           => $ownerId,
-              'society_id'         => $building['society_id'],
-              'is_occupied'        => $ownerId ? 1 : 0,
-              'user_role'          => 'owner',
-              'occupancy_status'   => $ownerId ? 'residing' : null,
-              'verification_status'=> 'pending',
-              'tenant_id'          => null,
-              'document_url'       => null,
-            ]);
-
-            $createdFlats[] = [
-              'id'         => $flatId,
-              'flat_number'=> $flatNumber,
-              'flat_type'  => $floorData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
-              'floor_number'=>$floorNumber,
-              'area_sqft'  => $floorData['area_sqft'] ?? null,
-              'owner_id'   => $ownerId
-            ];
-          }
-        }
-      }
-      // Handle explicit flats list
-      else if (isset($data['flats']) && is_array($data['flats'])) {
-        if (empty($data['flats'])) {
-          Response::error("Flats data must be a non-empty array");
-        }
-
-        // Insert flats
-        foreach ($data['flats'] as $flatData) {
-          // Validate required fields for each flat
-          if (empty($flatData['flat_number'])) {
-            Response::error("Each flat must have a flat_number");
-          }
-
-          $flatId = $this->insert('flats', [
-            'building_id'        => $data['building_id'],
-            'flat_number'        => $flatData['flat_number'],
-            'flat_type'          => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
-            'floor_number'       => $flatData['floor_number'] ?? '',
-            'area_sqft'          => $flatData['area_sqft'] ?? null,
-            'owner_id'           => $ownerId,
-            'society_id'         => $building['society_id'],
-            'is_occupied'        => $ownerId ? 1 : 0,
-            'user_role'          => 'owner',
-            'occupancy_status'   => $ownerId ? 'residing' : null,
-            'verification_status'=> 'pending',
-            'tenant_id'          => null,
-            'document_url'       => null,
-          ]);
-
-          $createdFlats[] = [
-            'id'          => $flatId,
-            'flat_number' => $flatData['flat_number'],
-            'flat_type'   => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
-            'floor_number'=> $flatData['floor_number'] ?? '',
-            'area_sqft'   => $flatData['area_sqft'] ?? null,
-            'owner_id'    => $ownerId
-          ];
-        }
-      } else {
-        Response::error("Either 'flats' or 'floors' configuration must be provided");
-      }
+           $createdFlats[] = [
+             'id'          => $flatId,
+             'flat_number' => $flatData['flat_number'],
+             'flat_type'   => $flatData['flat_type'] ?? $flatTypeGlobal ?? '2BHK',
+             'floor_number'=> $flatData['floor_number'] ?? '',
+             'area_sqft'   => $flatData['area_sqft'] ?? null,
+             'owner_id'    => $ownerId,
+             'tenant_id'   => $tenantId
+           ];
+         }
+       } else {
+         Response::error("Either 'flats' or 'floors' configuration must be provided");
+       }
 
       Response::success("Flats created successfully", [
         'building' => [
@@ -1010,15 +1044,115 @@ class AdminController extends BaseController
           'owner_id' => $ownerId
         ] : null,
         'flats' => $createdFlats
-      ], 201);
-
-    } catch (Exception $e) {
-      error_log("Create flats error: " . $e->getMessage());
-      Response::error("Failed to create flats: " . $e->getMessage(), 500);
-    }
-  }
-
-  public function assignUserRole()
+       ], 201);
+ 
+     } catch (Exception $e) {
+       error_log("Create flats error: " . $e->getMessage());
+       Response::error("Failed to create flats: " . $e->getMessage(), 500);
+     }
+   }
+ 
+   /**
+    * Update flat details
+    */
+   public function updateFlat($id)
+   {
+     try {
+       // Only admins can update flats
+       $user = $this->auth->authorizeAny(['super_admin', 'admin']);
+ 
+       $data = json_decode(file_get_contents("php://input"), true);
+ 
+       // Get the flat to check existence and permissions
+       $stmt = $this->db->prepare("SELECT f.id, f.building_id, f.society_id, f.owner_id, f.tenant_id FROM flats f WHERE f.id = ?");
+       $stmt->execute([$id]);
+       $flat = $stmt->fetch();
+ 
+       if (!$flat) {
+         Response::notFound("Flat not found");
+       }
+ 
+       // Verify user has permission to update flats in this society
+       if ($user['role'] !== 'super_admin') {
+         $this->auth->authorizeWithSociety($flat['society_id']);
+       }
+ 
+       // Prepare update data
+       $updateData = [];
+ 
+       // Update basic flat details if provided
+       $allowedFlatFields = ['flat_number', 'flat_type', 'floor_number', 'area_sqft'];
+       foreach ($allowedFlatFields as $field) {
+         if (isset($data[$field])) {
+           $updateData[$field] = $data[$field];
+         }
+       }
+ 
+       // Handle occupant change if owner_type is provided
+       if (isset($data['owner_type'])) {
+         switch ($data['owner_type']) {
+           case 'Owner':
+             if (isset($data['owner'])) {
+               $newOwnerId = $this->createUserFromData($data['owner'], $flat['society_id']);
+               $updateData['owner_id'] = $newOwnerId;
+               $updateData['tenant_id'] = null;
+             } else {
+               // If no owner data provided, set owner_id to null
+               $updateData['owner_id'] = null;
+               $updateData['tenant_id'] = null;
+             }
+             break;
+           case 'Tenant':
+             if (isset($data['tenant'])) {
+               $newTenantId = $this->createUserFromData($data['tenant'], $flat['society_id']);
+               $updateData['tenant_id'] = $newTenantId;
+               $updateData['owner_id'] = null;
+             } else {
+               // If no tenant data provided, set tenant_id to null
+               $updateData['tenant_id'] = null;
+               $updateData['owner_id'] = null;
+             }
+             break;
+           default:
+             Response::error("Invalid owner type");
+         }
+       }
+ 
+       // Determine final owner_id and tenant_id for calculating is_occupied, user_role, and occupancy_status
+       $finalOwnerId = isset($updateData['owner_id']) ? $updateData['owner_id'] : $flat['owner_id'];
+       $finalTenantId = isset($updateData['tenant_id']) ? $updateData['tenant_id'] : $flat['tenant_id'];
+ 
+       // Update is_occupied based on whether owner or tenant is set
+       $updateData['is_occupied'] = ($finalOwnerId || $finalTenantId) ? 1 : 0;
+ 
+       // Update user_role and occupancy_status
+       if ($finalOwnerId) {
+         $updateData['user_role'] = 'owner';
+         $updateData['occupancy_status'] = 'residing';
+       } elseif ($finalTenantId) {
+         $updateData['user_role'] = 'tenant';
+         $updateData['occupancy_status'] = 'residing';
+       } else {
+         $updateData['user_role'] = null;
+         $updateData['occupancy_status'] = null;
+       }
+ 
+       // Update the flat
+       $updated = $this->update('flats', $updateData, 'id = :id', ['id' => $id]);
+ 
+       if ($updated === 0) {
+         Response::error("Flat not found or no changes made", 404);
+       }
+ 
+       Response::success("Flat updated successfully", $updateData);
+ 
+     } catch (Exception $e) {
+       error_log("Update flat error: " . $e->getMessage());
+       Response::error("Failed to update flat: " . $e->getMessage(), 500);
+     }
+   }
+ 
+   public function assignUserRole()
   {
     try {
       // Only admins can assign roles
