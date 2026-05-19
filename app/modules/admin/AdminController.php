@@ -972,8 +972,8 @@ class AdminController extends BaseController
                'tenant_id'          => $tenantId,
                'society_id'         => $building['society_id'],
                'is_occupied'        => ($ownerId || $tenantId) ? 1 : 0,
-               'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : null)),
-               'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : null,
+               'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : '')),
+               'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : '',
                'verification_status'=> 'pending',
                'document_url'       => null,
              ]);
@@ -1013,8 +1013,8 @@ class AdminController extends BaseController
              'tenant_id'          => $tenantId,
              'society_id'         => $building['society_id'],
              'is_occupied'        => ($ownerId || $tenantId) ? 1 : 0,
-             'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : null)),
-             'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : null,
+             'user_role'          => ($ownerId ? 'owner' : ($tenantId ? 'tenant' : '')),
+             'occupancy_status'   => ($ownerId || $tenantId) ? 'residing' : '',
              'verification_status'=> 'pending',
              'document_url'       => null,
            ]);
@@ -1133,8 +1133,8 @@ class AdminController extends BaseController
          $updateData['user_role'] = 'tenant';
          $updateData['occupancy_status'] = 'residing';
        } else {
-         $updateData['user_role'] = null;
-         $updateData['occupancy_status'] = null;
+         $updateData['user_role'] = '';
+         $updateData['occupancy_status'] = '';
        }
  
        // Update the flat
