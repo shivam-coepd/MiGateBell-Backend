@@ -792,9 +792,10 @@ class AdminController extends BaseController
       $stmt = $this->db->prepare("
         SELECT f.id, f.flat_number, f.flat_type, f.floor_number, f.area_sqft, f.building_id,
                f.owner_id, f.tenant_id, f.society_id, f.is_occupied, f.created_at,
+               f.user_role, f.occupancy_status,
                b.name AS building_name,
-               owner.name AS owner_name, owner.phone AS owner_phone,
-               tenant.name AS tenant_name
+               owner.name AS owner_name, owner.phone AS owner_phone, owner.email AS owner_email,
+               tenant.name AS tenant_name, tenant.phone AS tenant_phone, tenant.email AS tenant_email
         FROM flats f
         LEFT JOIN buildings b ON f.building_id = b.id
         LEFT JOIN users owner ON f.owner_id = owner.id
