@@ -1152,6 +1152,57 @@ class AdminController extends BaseController
      }
    }
  
+    /**
+     * Delete flat details
+     */
+    public function deleteFlat($id)
+    {
+      try {
+        // Only admins can delete flats
+        $user = $this->auth->authorizeAny(['super_admin', 'admin']);
+
+        $stmt = $this->db->prepare("SELECT f.id, f.building_id, f.society_id, f.owner_id, f.tenant_id FROM flats f WHERE f.id = ?");
+        $stmt->execute([$id]);
+        $flat = $stmt->fetch();
+
+        if (!$flat) {
+          Response::notFound("Flat not found");
+        }
+
+        // Verify user has permission to delete flats in this society
+        if ($user['role'] !== 'super_admin') {
+          $this->auth->authorizeWithSociety($flat['society_id']);
+        }
+
+        $usersToDelete = [];
+        if ($flat['owner_id']) $usersToDelete[] = $flat['owner_id'];
+        if ($flat['tenant_id']) $usersToDelete[] = $flat['tenant_id'];
+
+        $this->db->beginTransaction();
+
+        $deleted = $this->delete('flats', 'id = ?', [$id]);
+        
+        if ($deleted === 0) {
+            $this->db->rollBack();
+            Response::error("Failed to delete flat", 500);
+        }
+
+        foreach ($usersToDelete as $userId) {
+           $this->delete('users', 'id = ?', [$userId]);
+        }
+
+        $this->db->commit();
+        Response::success("Flat deleted successfully");
+
+      } catch (Exception $e) {
+        if ($this->db->inTransaction()) {
+            $this->db->rollBack();
+        }
+        error_log("Delete flat error: " . $e->getMessage());
+        Response::error("Failed to delete flat: " . $e->getMessage(), 500);
+      }
+    }
+
    public function assignUserRole()
   {
     try {

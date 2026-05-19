@@ -141,6 +141,14 @@ try {
     if ($uri === '/api/flats' && $method === 'POST') {
         (new AdminController)->createFlatsForBuilding();
     }
+    
+    if (preg_match('/^\/api\/flats\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new AdminController)->updateFlat($matches[1]);
+    }
+
+    if (preg_match('/^\/api\/flats\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new AdminController)->deleteFlat($matches[1]);
+    }
 
     if (preg_match('/^\/api\/admin\/societies\/(\d+)$/', $uri, $matches) && $method === 'GET') {
         (new AdminController)->getSocietyById($matches[1]);
