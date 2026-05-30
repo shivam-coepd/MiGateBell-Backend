@@ -11,9 +11,10 @@
     ],
     "require": {
         "php": ">=7.4",
-        "ext-pdo": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "aws/aws-sdk-php": "^3.383",
         "firebase/php-jwt": "^6.0"
     },
     "require-dev": {
