@@ -1,53 +1,61 @@
 <?php
 /**
- * S3Helper - AWS S3 integration using presigned URLs (no SDK required)
- * Uses AWS Signature Version 4 to generate presigned PUT URLs.
+ * S3Helper - AWS S3 integration using AWS Signature Version 4.
+ * No SDK required. Works on any PHP 7.4+ host.
  */
 class S3Helper
 {
-    private $accessKey;
-    private $secretKey;
-    private $bucket;
-    private $region;
-    private $host;
+    private string $accessKey;
+    private string $secretKey;
+    private string $bucket;
+    private string $region;
+    private string $host;
 
     public function __construct()
     {
-        $this->accessKey = $_ENV['AWS_ACCESS_KEY_ID']     ?? getenv('AWS_ACCESS_KEY_ID');
-        $this->secretKey = $_ENV['AWS_SECRET_ACCESS_KEY'] ?? getenv('AWS_SECRET_ACCESS_KEY');
-        $this->bucket    = $_ENV['AWS_S3_BUCKET']         ?? getenv('AWS_S3_BUCKET');
-        $this->region    = $_ENV['AWS_REGION']            ?? getenv('AWS_REGION') ?? 'us-east-1';
-        $this->host      = $this->bucket . '.s3.' . $this->region . '.amazonaws.com';
+        $this->accessKey = (string)($_ENV['AWS_ACCESS_KEY_ID']     ?? getenv('AWS_ACCESS_KEY_ID')     ?? '');
+        $this->secretKey = (string)($_ENV['AWS_SECRET_ACCESS_KEY'] ?? getenv('AWS_SECRET_ACCESS_KEY') ?? '');
+        $this->bucket    = (string)($_ENV['AWS_S3_BUCKET']         ?? getenv('AWS_S3_BUCKET')         ?? '');
+        $this->region    = (string)($_ENV['AWS_REGION']            ?? getenv('AWS_REGION')            ?? 'us-east-1');
+        $this->host      = "{$this->bucket}.s3.{$this->region}.amazonaws.com";
     }
 
-    /**
-     * Generate a presigned PUT URL valid for $expiresIn seconds.
-     *
-     * @param string $objectKey  e.g. "profiles/user_123_avatar.jpg"
-     * @param string $contentType e.g. "image/jpeg"
-     * @param int    $expiresIn  seconds until URL expires (max 604800 = 7 days)
-     * @return array ['url' => presigned_url, 'public_url' => final_object_url]
-     */
-    public function generatePresignedPutUrl(string $objectKey, string $contentType = 'image/jpeg', int $expiresIn = 3600): array
-    {
-        $datetime   = gmdate('Ymd\THis\Z');
-        $date       = gmdate('Ymd');
-        $credential = $this->accessKey . '/' . $date . '/' . $this->region . '/s3/aws4_request';
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC: Presigned PUT URL (Flutter uploads directly to S3)
+    // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Generate a presigned PUT URL.
+     *
+     * IMPORTANT: Only 'host' is in X-Amz-SignedHeaders.
+     * The Flutter client must NOT send Content-Type or Content-Length headers
+     * in the PUT request — only the raw bytes as the body.
+     *
+     * @param  string $objectKey   e.g. "profiles/uid42_1234567890_abc.jpg"
+     * @param  int    $expiresIn   seconds (default 7200 = 2 hours)
+     * @return array  ['presigned_url', 'public_url', 'object_key', 'expires_in']
+     */
+    public function generatePresignedPutUrl(string $objectKey, int $expiresIn = 7200): array
+    {
+        $datetime        = gmdate('Ymd\THis\Z');
+        $date            = gmdate('Ymd');
+        $credentialScope = "{$date}/{$this->region}/s3/aws4_request";
+        $credential      = "{$this->accessKey}/{$credentialScope}";
+
+        // Query string params — must be sorted
         $queryParams = [
             'X-Amz-Algorithm'     => 'AWS4-HMAC-SHA256',
             'X-Amz-Credential'    => $credential,
             'X-Amz-Date'          => $datetime,
-            'X-Amz-Expires'       => (string) $expiresIn,
+            'X-Amz-Expires'       => (string)$expiresIn,
             'X-Amz-SignedHeaders' => 'host',
         ];
-
         ksort($queryParams);
         $queryString = http_build_query($queryParams, '', '&', PHP_QUERY_RFC3986);
 
         // Canonical request
         $canonicalUri     = '/' . ltrim($objectKey, '/');
-        $canonicalHeaders = 'host:' . $this->host . "\n";
+        $canonicalHeaders = "host:{$this->host}\n";
         $signedHeaders    = 'host';
         $payloadHash      = 'UNSIGNED-PAYLOAD';
 
@@ -61,23 +69,16 @@ class S3Helper
         ]);
 
         // String to sign
-        $credentialScope = $date . '/' . $this->region . '/s3/aws4_request';
-        $stringToSign    = implode("\n", [
+        $stringToSign = implode("\n", [
             'AWS4-HMAC-SHA256',
             $datetime,
             $credentialScope,
             hash('sha256', $canonicalRequest),
         ]);
 
-        // Signing key
-        $signingKey = $this->getSigningKey($date);
-        $signature  = hash_hmac('sha256', $stringToSign, $signingKey);
-
-        $presignedUrl = 'https://' . $this->host . $canonicalUri
-            . '?' . $queryString
-            . '&X-Amz-Signature=' . $signature;
-
-        $publicUrl = 'https://' . $this->host . $canonicalUri;
+        $signature    = hash_hmac('sha256', $stringToSign, $this->signingKey($date));
+        $presignedUrl = "https://{$this->host}{$canonicalUri}?{$queryString}&X-Amz-Signature={$signature}";
+        $publicUrl    = "https://{$this->host}{$canonicalUri}";
 
         return [
             'presigned_url' => $presignedUrl,
@@ -87,36 +88,41 @@ class S3Helper
         ];
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC: Server-side upload (multipart/form-data fallback)
+    // ─────────────────────────────────────────────────────────────────────────
+
     /**
-     * Upload a file directly from the server to S3 (for multipart/form-data uploads).
+     * Upload a local file to S3 from the server.
      * Returns the public URL on success.
      */
     public function uploadFileToS3(string $filePath, string $objectKey, string $contentType = 'image/jpeg'): string
     {
         $fileContent = file_get_contents($filePath);
         if ($fileContent === false) {
-            throw new Exception("Cannot read file: $filePath");
+            throw new \Exception("Cannot read file: {$filePath}");
         }
 
         $datetime        = gmdate('Ymd\THis\Z');
         $date            = gmdate('Ymd');
         $payloadHash     = hash('sha256', $fileContent);
         $contentLength   = strlen($fileContent);
+        $credentialScope = "{$date}/{$this->region}/s3/aws4_request";
 
+        // Headers must be sorted alphabetically by key
         $headers = [
-            'content-length' => (string) $contentLength,
-            'content-type'   => $contentType,
-            'host'           => $this->host,
+            'content-length'       => (string)$contentLength,
+            'content-type'         => $contentType,
+            'host'                 => $this->host,
             'x-amz-content-sha256' => $payloadHash,
-            'x-amz-date'     => $datetime,
+            'x-amz-date'           => $datetime,
         ];
-
         ksort($headers);
 
-        $canonicalHeaders = '';
+        $canonicalHeaders  = '';
         $signedHeadersList = [];
         foreach ($headers as $k => $v) {
-            $canonicalHeaders   .= $k . ':' . $v . "\n";
+            $canonicalHeaders   .= "{$k}:{$v}\n";
             $signedHeadersList[] = $k;
         }
         $signedHeaders = implode(';', $signedHeadersList);
@@ -131,75 +137,72 @@ class S3Helper
             $payloadHash,
         ]);
 
-        $credentialScope = $date . '/' . $this->region . '/s3/aws4_request';
-        $stringToSign    = implode("\n", [
+        $stringToSign = implode("\n", [
             'AWS4-HMAC-SHA256',
             $datetime,
             $credentialScope,
             hash('sha256', $canonicalRequest),
         ]);
 
-        $signingKey = $this->getSigningKey($date);
-        $signature  = hash_hmac('sha256', $stringToSign, $signingKey);
+        $signature  = hash_hmac('sha256', $stringToSign, $this->signingKey($date));
+        $authHeader = "AWS4-HMAC-SHA256 Credential={$this->accessKey}/{$credentialScope}"
+                    . ", SignedHeaders={$signedHeaders}"
+                    . ", Signature={$signature}";
 
-        $authHeader = 'AWS4-HMAC-SHA256 Credential=' . $this->accessKey . '/' . $credentialScope
-            . ', SignedHeaders=' . $signedHeaders
-            . ', Signature=' . $signature;
-
-        $curlHeaders = [
-            'Authorization: '       . $authHeader,
-            'Content-Length: '      . $contentLength,
-            'Content-Type: '        . $contentType,
-            'Host: '                . $this->host,
-            'x-amz-content-sha256: ' . $payloadHash,
-            'x-amz-date: '         . $datetime,
-        ];
-
-        $url = 'https://' . $this->host . $canonicalUri;
+        $url = "https://{$this->host}{$canonicalUri}";
         $ch  = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_CUSTOMREQUEST  => 'PUT',
             CURLOPT_POSTFIELDS     => $fileContent,
-            CURLOPT_HTTPHEADER     => $curlHeaders,
+            CURLOPT_HTTPHEADER     => [
+                "Authorization: {$authHeader}",
+                "Content-Length: {$contentLength}",
+                "Content-Type: {$contentType}",
+                "Host: {$this->host}",
+                "x-amz-content-sha256: {$payloadHash}",
+                "x-amz-date: {$datetime}",
+            ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        $response   = curl_exec($ch);
-        $httpCode   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError  = curl_error($ch);
+        $response  = curl_exec($ch);
+        $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
         if ($curlError) {
-            throw new Exception("cURL error uploading to S3: $curlError");
+            throw new \Exception("cURL error: {$curlError}");
         }
         if ($httpCode !== 200) {
-            throw new Exception("S3 upload failed (HTTP $httpCode): $response");
+            throw new \Exception("S3 upload failed (HTTP {$httpCode}): {$response}");
         }
 
-        return 'https://' . $this->host . $canonicalUri;
+        return "https://{$this->host}{$canonicalUri}";
     }
 
-    /**
-     * Delete an object from S3 by its key.
-     */
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC: Delete object
+    // ─────────────────────────────────────────────────────────────────────────
+
     public function deleteObject(string $objectKey): bool
     {
-        $datetime    = gmdate('Ymd\THis\Z');
-        $date        = gmdate('Ymd');
-        $payloadHash = hash('sha256', '');
+        $datetime        = gmdate('Ymd\THis\Z');
+        $date            = gmdate('Ymd');
+        $payloadHash     = hash('sha256', '');
+        $credentialScope = "{$date}/{$this->region}/s3/aws4_request";
 
         $headers = [
             'host'                 => $this->host,
             'x-amz-content-sha256' => $payloadHash,
             'x-amz-date'           => $datetime,
         ];
-
         ksort($headers);
+
         $canonicalHeaders  = '';
         $signedHeadersList = [];
         foreach ($headers as $k => $v) {
-            $canonicalHeaders   .= $k . ':' . $v . "\n";
+            $canonicalHeaders   .= "{$k}:{$v}\n";
             $signedHeadersList[] = $k;
         }
         $signedHeaders = implode(';', $signedHeadersList);
@@ -214,57 +217,57 @@ class S3Helper
             $payloadHash,
         ]);
 
-        $credentialScope = $date . '/' . $this->region . '/s3/aws4_request';
-        $stringToSign    = implode("\n", [
+        $stringToSign = implode("\n", [
             'AWS4-HMAC-SHA256',
             $datetime,
             $credentialScope,
             hash('sha256', $canonicalRequest),
         ]);
 
-        $signingKey = $this->getSigningKey($date);
-        $signature  = hash_hmac('sha256', $stringToSign, $signingKey);
+        $signature  = hash_hmac('sha256', $stringToSign, $this->signingKey($date));
+        $authHeader = "AWS4-HMAC-SHA256 Credential={$this->accessKey}/{$credentialScope}"
+                    . ", SignedHeaders={$signedHeaders}"
+                    . ", Signature={$signature}";
 
-        $authHeader = 'AWS4-HMAC-SHA256 Credential=' . $this->accessKey . '/' . $credentialScope
-            . ', SignedHeaders=' . $signedHeaders
-            . ', Signature=' . $signature;
-
-        $url = 'https://' . $this->host . $canonicalUri;
+        $url = "https://{$this->host}{$canonicalUri}";
         $ch  = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_CUSTOMREQUEST  => 'DELETE',
             CURLOPT_HTTPHEADER     => [
-                'Authorization: '        . $authHeader,
-                'Host: '                 . $this->host,
-                'x-amz-content-sha256: ' . $payloadHash,
-                'x-amz-date: '           . $datetime,
+                "Authorization: {$authHeader}",
+                "Host: {$this->host}",
+                "x-amz-content-sha256: {$payloadHash}",
+                "x-amz-date: {$datetime}",
             ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        $httpCode = curl_getinfo(curl_exec($ch) ? $ch : $ch, CURLINFO_HTTP_CODE);
+        $response = curl_exec($ch);  // execute and store result
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         return $httpCode === 204;
     }
 
-    /**
-     * Build a unique S3 object key for a given context.
-     * e.g. "profiles/123/avatar_1234567890.jpg"
-     */
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC STATIC: Build object key
+    // ─────────────────────────────────────────────────────────────────────────
+
     public static function buildObjectKey(string $folder, string $prefix, string $extension = 'jpg'): string
     {
-        return $folder . '/' . $prefix . '_' . time() . '_' . uniqid() . '.' . $extension;
+        return "{$folder}/{$prefix}_" . time() . '_' . uniqid() . ".{$extension}";
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // PRIVATE: Signing key derivation
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private function getSigningKey(string $date): string
+    private function signingKey(string $date): string
     {
-        $kDate    = hash_hmac('sha256', $date,           'AWS4' . $this->secretKey, true);
+        $kDate    = hash_hmac('sha256', $date,           "AWS4{$this->secretKey}", true);
         $kRegion  = hash_hmac('sha256', $this->region,   $kDate,    true);
         $kService = hash_hmac('sha256', 's3',            $kRegion,  true);
-        return     hash_hmac('sha256', 'aws4_request',  $kService, true);
+        return      hash_hmac('sha256', 'aws4_request',  $kService, true);
     }
 }
