@@ -5,21 +5,27 @@ require_once __DIR__ . '/../../helpers/s3_helper.php';
 /**
  * UploadController
  *
- * Handles two upload strategies:
- *  1. GET  /api/upload/presign  → returns a presigned PUT URL so Flutter uploads directly to S3
- *  2. POST /api/upload/file     → accepts multipart file, uploads server-side to S3, returns public URL
+ * Two endpoints:
+ *  GET  /api/upload/presign  → presigned PUT URL (Flutter uploads directly to S3)
+ *  POST /api/upload/file     → server-side multipart upload to S3 (fallback)
  */
 class UploadController extends BaseController
 {
     private S3Helper $s3;
 
-    // Allowed MIME types
     private array $allowedMimes = [
         'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
     ];
 
-    // Max file size: 10 MB
-    private int $maxBytes = 10 * 1024 * 1024;
+    private array $extToMime = [
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png'  => 'image/png',
+        'webp' => 'image/webp',
+        'gif'  => 'image/gif',
+    ];
+
+    private int $maxBytes = 10 * 1024 * 1024; // 10 MB
 
     public function __construct()
     {
@@ -30,27 +36,24 @@ class UploadController extends BaseController
     // ── 1. Presigned URL ─────────────────────────────────────────────────────
 
     /**
-     * GET /api/upload/presign?folder=profiles&content_type=image/jpeg&ext=jpg
+     * GET /api/upload/presign?folder=profiles&ext=jpg
      *
-     * Returns a short-lived presigned PUT URL.
-     * Flutter uploads the image bytes directly to S3 with a PUT request,
-     * then stores the returned public_url in the backend via the normal profile/visitor APIs.
+     * Returns a presigned PUT URL. The Flutter client PUTs raw bytes to S3
+     * with NO extra headers (no Content-Type, no Content-Length).
      */
     public function getPresignedUrl(): void
     {
         $user = $this->auth->authenticate();
 
-        $folder      = preg_replace('/[^a-z0-9_\-]/', '', strtolower($_GET['folder'] ?? 'uploads'));
-        $contentType = $_GET['content_type'] ?? 'image/jpeg';
-        $ext         = preg_replace('/[^a-z0-9]/', '', strtolower($_GET['ext'] ?? 'jpg'));
+        $folder = preg_replace('/[^a-z0-9_\-]/', '', strtolower($_GET['folder'] ?? 'uploads'));
+        $ext    = preg_replace('/[^a-z0-9]/',    '', strtolower($_GET['ext']    ?? 'jpg'));
 
-        if (!in_array($contentType, $this->allowedMimes, true)) {
-            Response::error('Content type not allowed. Use: ' . implode(', ', $this->allowedMimes), 400);
+        if (!array_key_exists($ext, $this->extToMime)) {
+            $ext = 'jpg';
         }
 
         $objectKey = S3Helper::buildObjectKey($folder, 'uid' . $user['uid'], $ext);
-
-        $result = $this->s3->generatePresignedPutUrl($objectKey, $contentType, 3600);
+        $result    = $this->s3->generatePresignedPutUrl($objectKey, 7200);
 
         Response::success('Presigned URL generated', $result);
     }
@@ -60,9 +63,6 @@ class UploadController extends BaseController
     /**
      * POST /api/upload/file
      * multipart/form-data: file=<binary>, folder=profiles
-     *
-     * Uploads the file from the server to S3 and returns the public URL.
-     * Use this as a fallback if direct presigned upload is not feasible.
      */
     public function uploadFile(): void
     {
@@ -82,7 +82,6 @@ class UploadController extends BaseController
             Response::error('File exceeds 10 MB limit', 400);
         }
 
-        // Validate MIME via finfo (not just extension)
         $finfo    = finfo_open(FILEINFO_MIME_TYPE);
         $mimeType = finfo_file($finfo, $file['tmp_name']);
         finfo_close($finfo);
@@ -101,7 +100,7 @@ class UploadController extends BaseController
                 'url'        => $publicUrl,
                 'object_key' => $objectKey,
             ], 201);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             error_log('S3 upload error: ' . $e->getMessage());
             Response::error('Failed to upload file: ' . $e->getMessage(), 500);
         }

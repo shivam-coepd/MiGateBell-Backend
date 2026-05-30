@@ -1,12 +1,17 @@
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::amzn-s3-mygatebell/*"
-    }
-  ]
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadGetObject",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::617255151011:root"
+            },
+            "Action": [
+                "s3:GetObject",
+                "s3:*"
+            ],
+            "Resource": "arn:aws:s3:::amzn-s3-mygatebell/*"
+        }
+    ]
 }

@@ -583,11 +583,11 @@ try {
     }
 
     // Upload routes (S3)
-    // GET  /api/upload/presign?folder=profiles&content_type=image/jpeg&ext=jpg
+    // GET  /api/upload/presign?folder=profiles&ext=jpg
     if ($uri === '/api/upload/presign' && $method === 'GET') {
         (new UploadController())->getPresignedUrl();
     }
-    // POST /api/upload/file  (multipart, server-side upload)
+    // POST /api/upload/file  (multipart, server-side upload fallback)
     if ($uri === '/api/upload/file' && $method === 'POST') {
         (new UploadController())->uploadFile();
     }
