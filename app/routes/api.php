@@ -33,6 +33,7 @@ require_once __DIR__ . '/../modules/locations/LocationController.php';
 require_once __DIR__ . '/../modules/admin/SuperAdminController.php';
 require_once __DIR__ . '/../helpers/s3_helper.php';
 require_once __DIR__ . '/../modules/upload/UploadController.php';
+require_once __DIR__ . '/../modules/guard/GuardController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -580,6 +581,26 @@ try {
     }
     if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
         (new VisitorsController())->deleteVisitor($matches[1]);
+    }
+
+    // Guard routes
+    if ($uri === '/api/guard/residents' && $method === 'GET') {
+        (new GuardController())->getResidents();
+    }
+    if ($uri === '/api/guard/vehicle-entries' && $method === 'GET') {
+        (new GuardController())->getVehicleEntries();
+    }
+    if ($uri === '/api/guard/vehicle-entries' && $method === 'POST') {
+        (new GuardController())->addVehicleEntry();
+    }
+    if (preg_match('/^\/api\/guard\/vehicle-entries\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
+        (new GuardController())->updateVehicleEntryStatus($matches[1]);
+    }
+    if ($uri === '/api/guard/attendance' && $method === 'GET') {
+        (new GuardController())->getAttendance();
+    }
+    if ($uri === '/api/guard/attendance/mark' && $method === 'POST') {
+        (new GuardController())->markAttendance();
     }
 
     // Upload routes (S3)
