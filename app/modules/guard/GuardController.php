@@ -249,6 +249,165 @@ class GuardController extends BaseController
     }
 
     /**
+     * GET /api/admin/guards
+     * Admin: list all guards in their society with optional search/status filters.
+     */
+    public function adminListGuards()
+    {
+        try {
+            $user = $this->auth->authorizeAny(['admin']);
+
+            $page   = isset($_GET['page'])   ? (int) $_GET['page']   : 1;
+            $limit  = isset($_GET['limit'])  ? (int) $_GET['limit']  : 20;
+            $search = isset($_GET['search']) ? trim($_GET['search'])  : null;
+            $status = isset($_GET['status']) ? trim($_GET['status'])  : null;
+
+            $pagination = $this->paginate($page, $limit);
+
+            $whereClause = "WHERE u.society_id = :society_id AND u.role = 'guard'";
+            $params = ['society_id' => $user['society_id']];
+
+            if ($search) {
+                $whereClause .= " AND (u.name LIKE :search OR u.phone LIKE :search OR u.email LIKE :search)";
+                $params['search'] = "%{$search}%";
+            }
+            if ($status) {
+                $whereClause .= " AND u.status = :status";
+                $params['status'] = $status;
+            }
+
+            $countSql = "SELECT COUNT(*) as count FROM users u {$whereClause}";
+            $countStmt = $this->db->prepare($countSql);
+            $countStmt->execute($params);
+            $total = $countStmt->fetch()['count'];
+
+            $sql = "
+                SELECT u.id, u.app_user_id, u.name, u.phone, u.email, u.status,
+                       u.profile_image, u.created_at,
+                       (SELECT ga.status FROM guard_attendance ga
+                        WHERE ga.guard_id = u.id AND DATE(ga.date) = CURDATE()
+                        LIMIT 1) AS today_status,
+                       (SELECT ga.in_time FROM guard_attendance ga
+                        WHERE ga.guard_id = u.id AND DATE(ga.date) = CURDATE()
+                        LIMIT 1) AS today_in_time,
+                       (SELECT ga.out_time FROM guard_attendance ga
+                        WHERE ga.guard_id = u.id AND DATE(ga.date) = CURDATE()
+                        LIMIT 1) AS today_out_time
+                FROM users u
+                {$whereClause}
+                ORDER BY u.name ASC
+                LIMIT :limit OFFSET :offset
+            ";
+
+            $stmt = $this->db->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue(":{$key}", $value);
+            }
+            $stmt->bindValue(':limit', $pagination['limit'], PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $pagination['offset'], PDO::PARAM_INT);
+            $stmt->execute();
+            $guards = $stmt->fetchAll();
+
+            $this->sendPaginatedResponse($guards, $total, $pagination, "Guards retrieved successfully");
+
+        } catch (Exception $e) {
+            error_log("adminListGuards error: " . $e->getMessage());
+            Response::error("Failed to retrieve guards: " . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * GET /api/admin/guards/attendance
+     * Admin: get attendance records for all guards in society.
+     * Query params: guard_id, date_from, date_to, status, page, limit
+     */
+    public function adminGetAttendance()
+    {
+        try {
+            $user = $this->auth->authorizeAny(['admin']);
+
+            $page     = isset($_GET['page'])      ? (int) $_GET['page']          : 1;
+            $limit    = isset($_GET['limit'])     ? (int) $_GET['limit']         : 30;
+            $guardId  = isset($_GET['guard_id'])  ? (int) $_GET['guard_id']      : null;
+            $dateFrom = isset($_GET['date_from']) ? trim($_GET['date_from'])      : date('Y-m-01'); // default: 1st of month
+            $dateTo   = isset($_GET['date_to'])   ? trim($_GET['date_to'])        : date('Y-m-d');
+            $status   = isset($_GET['status'])    ? trim($_GET['status'])         : null;
+
+            $pagination = $this->paginate($page, $limit);
+
+            $whereClause = "WHERE u.society_id = :society_id";
+            $params = ['society_id' => $user['society_id']];
+
+            if ($guardId) {
+                $whereClause .= " AND ga.guard_id = :guard_id";
+                $params['guard_id'] = $guardId;
+            }
+            if ($dateFrom) {
+                $whereClause .= " AND ga.date >= :date_from";
+                $params['date_from'] = $dateFrom;
+            }
+            if ($dateTo) {
+                $whereClause .= " AND ga.date <= :date_to";
+                $params['date_to'] = $dateTo;
+            }
+            if ($status) {
+                $whereClause .= " AND ga.status = :status";
+                $params['status'] = $status;
+            }
+
+            $countSql = "
+                SELECT COUNT(*) as count
+                FROM guard_attendance ga
+                JOIN users u ON ga.guard_id = u.id
+                {$whereClause}
+            ";
+            $countStmt = $this->db->prepare($countSql);
+            $countStmt->execute($params);
+            $total = $countStmt->fetch()['count'];
+
+            $sql = "
+                SELECT ga.*, u.name as guard_name, u.phone as guard_phone
+                FROM guard_attendance ga
+                JOIN users u ON ga.guard_id = u.id
+                {$whereClause}
+                ORDER BY ga.date DESC, u.name ASC
+                LIMIT :limit OFFSET :offset
+            ";
+
+            $stmt = $this->db->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue(":{$key}", $value);
+            }
+            $stmt->bindValue(':limit', $pagination['limit'], PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $pagination['offset'], PDO::PARAM_INT);
+            $stmt->execute();
+            $records = $stmt->fetchAll();
+
+            // Summary counts for the queried range
+            $summaryStmt = $this->db->prepare("
+                SELECT
+                    COUNT(*) as total_records,
+                    SUM(CASE WHEN ga.status = 'present' THEN 1 ELSE 0 END) as present_count,
+                    SUM(CASE WHEN ga.status = 'absent'   THEN 1 ELSE 0 END) as absent_count,
+                    SUM(CASE WHEN ga.status = 'half_day' THEN 1 ELSE 0 END) as half_day_count
+                FROM guard_attendance ga
+                JOIN users u ON ga.guard_id = u.id
+                {$whereClause}
+            ");
+            $summaryStmt->execute($params);
+            $summary = $summaryStmt->fetch();
+
+            $this->sendPaginatedResponse($records, $total, $pagination, "Attendance retrieved successfully", [
+                'summary' => $summary,
+            ]);
+
+        } catch (Exception $e) {
+            error_log("adminGetAttendance error: " . $e->getMessage());
+            Response::error("Failed to retrieve attendance: " . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * POST /api/guard/attendance/mark
      * Mark guard check-in or check-out.
      */

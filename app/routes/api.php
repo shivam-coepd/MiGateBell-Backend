@@ -583,6 +583,14 @@ try {
         (new VisitorsController())->deleteVisitor($matches[1]);
     }
 
+    // Admin Guard management routes
+    if ($uri === '/api/admin/guards' && $method === 'GET') {
+        (new GuardController())->adminListGuards();
+    }
+    if ($uri === '/api/admin/guards/attendance' && $method === 'GET') {
+        (new GuardController())->adminGetAttendance();
+    }
+
     // Guard routes
     if ($uri === '/api/guard/residents' && $method === 'GET') {
         (new GuardController())->getResidents();
