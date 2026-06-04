@@ -452,7 +452,7 @@ class AuthController extends BaseController
       $token = substr($authHeader, 7);
 
       try {
-        $payload = jwt_decode_token($token);
+        $payload = jwt_decode_token($token, null, true); // Ignore expiration when refreshing
 
         // Generate new token with extended expiration
         $tokenData = [
