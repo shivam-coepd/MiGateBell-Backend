@@ -21,7 +21,7 @@ function jwt_encode($payload, $secret = null){
   return $header . "." . $payloadEncoded . "." . $signature;
 }
 
-function jwt_decode_token($token, $secret = null){
+function jwt_decode_token($token, $secret = null, $ignoreExpiration = false){
   if ($secret === null) {
     $secret = getenv('JWT_SECRET') ?: 'supersecret';
   }
@@ -44,7 +44,7 @@ function jwt_decode_token($token, $secret = null){
   $decodedPayload = json_decode(base64UrlDecode($payload), true);
   
   // Check expiration
-  if (isset($decodedPayload['exp']) && time() > $decodedPayload['exp']) {
+  if (!$ignoreExpiration && isset($decodedPayload['exp']) && time() > $decodedPayload['exp']) {
     throw new Exception('Token has expired');
   }
   
