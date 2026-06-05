@@ -129,4 +129,51 @@ class PetController extends BaseController
             Response::error("Failed to delete pet: " . $e->getMessage(), 500);
         }
     }
+
+    public function updatePet($id)
+    {
+        try {
+            $user = $this->auth->authenticate();
+
+            // Check ownership
+            $stmt = $this->db->prepare("SELECT id FROM pets WHERE id = ? AND resident_id = ? AND is_active = 1");
+            $stmt->execute([$id, $user['uid']]);
+            if (!$stmt->fetch()) {
+                Response::notFound("Pet not found or unauthorized");
+            }
+
+            $data = json_decode(file_get_contents("php://input"), true);
+            if (empty($data)) {
+                Response::validationError(["No data provided"]);
+            }
+
+            $allowedFields = ['name', 'pet_type_id', 'breed', 'age', 'weight', 'vaccination_status', 'notes', 'image_url'];
+            $updateData = [];
+
+            foreach ($allowedFields as $field) {
+                if (isset($data[$field])) {
+                    $updateData[$field] = $data[$field];
+                }
+            }
+
+            if (empty($updateData)) {
+                Response::validationError(["Nothing to update"]);
+            }
+
+            // Verify pet_type_id exists if provided
+            if (isset($updateData['pet_type_id'])) {
+                $stmt = $this->db->prepare("SELECT id FROM pet_types WHERE id = ?");
+                $stmt->execute([$updateData['pet_type_id']]);
+                if (!$stmt->fetch()) {
+                    Response::error("Invalid pet_type_id", 400);
+                }
+            }
+
+            $this->update('pets', $updateData, 'id = :id', ['id' => $id]);
+            Response::success("Pet updated successfully", ['id' => $id, 'updated_fields' => $updateData]);
+
+        } catch (Exception $e) {
+            Response::error("Failed to update pet: " . $e->getMessage(), 500);
+        }
+    }
 }
