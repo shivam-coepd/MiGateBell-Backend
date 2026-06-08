@@ -442,8 +442,7 @@ class AuthController extends BaseController
   public function refreshToken()
   {
     try {
-      $headers = apache_request_headers();
-      $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
+      $authHeader = get_authorization_header();
 
       if (!$authHeader || strpos($authHeader, 'Bearer ') !== 0) {
         Response::unauthorized("Authorization header missing or invalid");
@@ -483,8 +482,7 @@ class AuthController extends BaseController
   public function changePassword()
   {
     try {
-      $headers = apache_request_headers();
-      $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
+      $authHeader = get_authorization_header();
 
       if (!$authHeader || strpos($authHeader, 'Bearer ') !== 0) {
         Response::unauthorized("Authorization header missing or invalid");

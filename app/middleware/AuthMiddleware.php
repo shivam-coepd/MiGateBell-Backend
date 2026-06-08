@@ -7,16 +7,25 @@ class AuthMiddleware {
   public function __construct($database) {
     $this->db = $database;
   }
+
+  /**
+   * Extract the raw Bearer token string from the request, regardless of
+   * whether we're running under Apache, Nginx, FastCGI, or CGI mode.
+   */
+  private function extractBearerToken() {
+    $authHeader = get_authorization_header();
+    if (!$authHeader || strpos($authHeader, 'Bearer ') !== 0) {
+      return null;
+    }
+    return substr($authHeader, 7);
+  }
   
   public function authenticate() {
-    $headers = apache_request_headers();
-    $authHeader = isset($headers['Authorization']) ? $headers['Authorization'] : '';
-    
-    if (!$authHeader || strpos($authHeader, 'Bearer ') !== 0) {
+    $token = $this->extractBearerToken();
+
+    if ($token === null) {
       Response::unauthorized("Authorization header missing or invalid");
     }
-    
-    $token = substr($authHeader, 7);
     
     try {
       $payload = jwt_decode_token($token);

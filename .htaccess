@@ -1,9 +1,13 @@
 Options +FollowSymLinks -MultiViews
 RewriteEngine On
 
-# Handle Authorization Header
+# ── Pass Authorization header through to PHP regardless of server mode ────────
+# Apache + mod_php
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# CGI / FastCGI (some hosts strip the header otherwise)
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 
 # Redirect Trailing Slashes If Not A Folder...
 RewriteCond %{REQUEST_FILENAME} !-d
