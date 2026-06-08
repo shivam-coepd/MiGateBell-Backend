@@ -92,6 +92,9 @@ try {
     if ($uri === '/api/auth/logout' && $method === 'POST') {
         (new AuthController)->logout();
     }
+    if ($uri === '/api/auth/change-password' && $method === 'POST') {
+        (new AuthController)->changePassword();
+    }
     if (preg_match('/^\/api\/auth\/users\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
         (new AuthController)->updateUserStatus($matches[1]);
     }
@@ -144,7 +147,7 @@ try {
     if ($uri === '/api/flats' && $method === 'POST') {
         (new AdminController)->createFlatsForBuilding();
     }
-    
+
     if (preg_match('/^\/api\/flats\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
         (new AdminController)->updateFlat($matches[1]);
     }
@@ -542,14 +545,19 @@ try {
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)$/', $uri, $matches)) {
         $controller = new SuperAdminController();
-        if ($method === 'GET')    $controller->getSocietyById($matches[1]);
-        if ($method === 'PUT')    $controller->updateSociety($matches[1]);
-        if ($method === 'DELETE') $controller->deleteSociety($matches[1]);
+        if ($method === 'GET')
+            $controller->getSocietyById($matches[1]);
+        if ($method === 'PUT')
+            $controller->updateSociety($matches[1]);
+        if ($method === 'DELETE')
+            $controller->deleteSociety($matches[1]);
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/admin$/', $uri, $matches)) {
         $controller = new SuperAdminController();
-        if ($method === 'POST') $controller->createSocietyAdmin($matches[1]);
-        if ($method === 'PUT') $controller->updateSocietyAdmin($matches[1]);
+        if ($method === 'POST')
+            $controller->createSocietyAdmin($matches[1]);
+        if ($method === 'PUT')
+            $controller->updateSocietyAdmin($matches[1]);
     }
     if (preg_match('/^\/api\/superadmin\/societies\/([0-9]+)\/approve$/', $uri, $matches) && $method === 'PUT') {
         (new SuperAdminController())->approveSociety($matches[1]);
