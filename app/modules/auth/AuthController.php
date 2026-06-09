@@ -401,8 +401,24 @@ class AuthController extends BaseController
       $stmt->execute([$phone, '+91' . $phone, '91' . $phone]);
       $user = $stmt->fetch();
 
-      if (!$user || !password_verify($data['password'], $user['password'])) {
+      $role = $data['role'] ?? null;
+
+      if (!$user) {
+        if ($role === 'resident') {
+          Response::error("Resident data not present, please contact to society admin", 401);
+        }
         Response::error("Invalid credentials", 401);
+      }
+
+      if (!password_verify($data['password'], $user['password'])) {
+        Response::error("Invalid credentials", 401);
+      }
+
+      if ($role && $user['role'] !== $role) {
+        if ($role === 'resident') {
+          Response::error("Resident data not present, please contact to society admin", 401);
+        }
+        Response::error("Invalid role for this user", 403);
       }
 
       if ($user['role'] === 'admin') {
