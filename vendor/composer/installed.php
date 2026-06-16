@@ -3,7 +3,7 @@
         'name' => 'migate/backend-full',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => '8a26c5dc2b436212a0a5045b381c22b865803df7',
+        'reference' => '44dbf34983b383c183e3ea70f299e4f35a8f0322',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -46,6 +46,15 @@
             'aliases' => array(),
             'dev_requirement' => false,
         ),
+        'google/auth' => array(
+            'pretty_version' => 'v1.51.0',
+            'version' => '1.51.0.0',
+            'reference' => '4c4776e398ff255e81b3b8c4373983f5e1b765bf',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../google/auth',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'guzzlehttp/guzzle' => array(
             'pretty_version' => '7.10.5',
             'version' => '7.10.5.0',
@@ -76,7 +85,7 @@
         'migate/backend-full' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => '8a26c5dc2b436212a0a5045b381c22b865803df7',
+            'reference' => '44dbf34983b383c183e3ea70f299e4f35a8f0322',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -181,6 +190,15 @@
             'aliases' => array(),
             'dev_requirement' => true,
         ),
+        'psr/cache' => array(
+            'pretty_version' => '3.0.0',
+            'version' => '3.0.0.0',
+            'reference' => 'aa5030cfa5405eccfdcb1083ce040c2cb8d253bf',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../psr/cache',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'psr/http-client' => array(
             'pretty_version' => '1.0.3',
             'version' => '1.0.3.0',
@@ -225,6 +243,15 @@
             'provided' => array(
                 0 => '1.0',
             ),
+        ),
+        'psr/log' => array(
+            'pretty_version' => '3.0.2',
+            'version' => '3.0.2.0',
+            'reference' => 'f16e1d5863e37f8d8c2a01719f5b34baa2b714d3',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../psr/log',
+            'aliases' => array(),
+            'dev_requirement' => false,
         ),
         'ralouphie/getallheaders' => array(
             'pretty_version' => '3.0.3',

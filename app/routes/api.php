@@ -458,11 +458,20 @@ try {
     if ($uri === '/api/notifications' && $method === 'GET') {
         (new NotificationController)->getNotifications();
     }
+    if ($uri === '/api/notifications/unread-count' && $method === 'GET') {
+        (new NotificationController)->getUnreadCount();
+    }
     if (preg_match('/^\/api\/notifications\/(\d+)\/read$/', $uri, $matches) && $method === 'PUT') {
         (new NotificationController)->markAsRead($matches[1]);
     }
     if ($uri === '/api/notifications/read-all' && $method === 'PUT') {
         (new NotificationController)->markAllAsRead();
+    }
+    if ($uri === '/api/notifications/tokens' && $method === 'POST') {
+        (new NotificationController)->registerDeviceToken();
+    }
+    if ($uri === '/api/notifications/tokens/unregister' && $method === 'POST') {
+        (new NotificationController)->unregisterDeviceToken();
     }
 
     // Family Routes

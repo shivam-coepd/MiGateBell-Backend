@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../core/BaseController.php';
+require_once __DIR__.'/../../helpers/notification_helper.php';
 
 class AccountingController extends BaseController {
   
@@ -228,6 +229,40 @@ class AccountingController extends BaseController {
         ]);
       }
       
+      // Notify Resident (if mapped)
+      if (!empty($data['resident_id'])) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendPushNotification(
+              $data['resident_id'],
+              "New Invoice Generated",
+              "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
+              ['invoice_id' => $invoiceId],
+              'invoice_generated',
+              $invoiceId,
+              '/accounting/invoices'
+          );
+      } else {
+          // Find resident for flat
+          $stmt = $this->db->prepare("SELECT owner_id, tenant_id FROM flats WHERE id = ?");
+          $stmt->execute([$data['flat_id']]);
+          $flat = $stmt->fetch();
+          if ($flat) {
+              $residentToNotify = $flat['tenant_id'] ?? $flat['owner_id'];
+              if ($residentToNotify) {
+                  $notificationHelper = new NotificationHelper();
+                  $notificationHelper->sendPushNotification(
+                      $residentToNotify,
+                      "New Invoice Generated",
+                      "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
+                      ['invoice_id' => $invoiceId],
+                      'invoice_generated',
+                      $invoiceId,
+                      '/accounting/invoices'
+                  );
+              }
+          }
+      }
+
       Response::success("Invoice created successfully", ['invoice_id' => $invoiceId], 201);
       
     } catch(Exception $e) {
@@ -465,6 +500,38 @@ class AccountingController extends BaseController {
         'receipt_date' => date('Y-m-d')
       ]);
       
+      // Notify Admin
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'admin' AND society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $admins = $stmt->fetchAll(PDO::FETCH_COLUMN);
+      
+      if (!empty($admins)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $admins,
+              "Payment Received",
+              "A payment of ₹{$data['amount']} was received for Invoice #{$data['invoice_id']}.",
+              ['payment_id' => $paymentId],
+              'payment_received',
+              $paymentId,
+              '/admin/accounting/payments'
+          );
+      }
+      
+      // Notify Resident
+      if ($invoice['resident_id']) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendPushNotification(
+              $invoice['resident_id'],
+              "Payment Successful",
+              "Your payment of ₹{$data['amount']} was received successfully.",
+              ['receipt_id' => $receiptId],
+              'payment_received',
+              $receiptId,
+              '/accounting/receipts'
+          );
+      }
+
       Response::success("Payment processed successfully", [
         'payment_id' => $paymentId,
         'receipt_id' => $receiptId,

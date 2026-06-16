@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../core/BaseController.php';
+require_once __DIR__.'/../../helpers/notification_helper.php';
 
 class SecurityController extends BaseController {
   
@@ -40,7 +41,25 @@ class SecurityController extends BaseController {
         'location' => $data['location'] ?? null,
         'status' => 'open'
       ]);
+
+      // Notify everyone in society
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $users = $stmt->fetchAll(PDO::FETCH_COLUMN);
       
+      if (!empty($users)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $users,
+              "Security Alert: " . strtoupper($data['alert_type']),
+              $data['description'],
+              ['alert_id' => $alertId],
+              'security_alert',
+              $alertId,
+              '/security/alerts'
+          );
+      }
+
       Response::success("Security alert reported successfully", ['alert_id' => $alertId], 201);
       
     } catch(Exception $e) {

@@ -15,7 +15,8 @@
         "ext-mbstring": "*",
         "ext-pdo": "*",
         "aws/aws-sdk-php": "^3.383",
-        "firebase/php-jwt": "^6.0"
+        "firebase/php-jwt": "^6.0",
+        "google/auth": "^1.51"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0",

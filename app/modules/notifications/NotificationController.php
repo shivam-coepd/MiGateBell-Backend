@@ -78,4 +78,68 @@ class NotificationController extends BaseController
             Response::error("Failed to mark all read: " . $e->getMessage(), 500);
         }
     }
+
+    public function getUnreadCount()
+    {
+        try {
+            $user = $this->auth->authenticate();
+            $stmt = $this->db->prepare("SELECT count(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
+            $stmt->execute([$user['uid']]);
+            $unreadCount = $stmt->fetch()['count'];
+            Response::success("Unread count retrieved", ['count' => $unreadCount]);
+        } catch (Exception $e) {
+            Response::error("Failed to retrieve unread count: " . $e->getMessage(), 500);
+        }
+    }
+
+    public function registerDeviceToken()
+    {
+        try {
+            $user = $this->auth->authenticate();
+            $data = $this->getPostData();
+
+            if (!isset($data['device_token']) || !isset($data['device_type'])) {
+                Response::error("Device token and type are required", 400);
+            }
+
+            $token = $data['device_token'];
+            $type = in_array($data['device_type'], ['android', 'ios', 'web']) ? $data['device_type'] : 'android';
+
+            // Check if token already exists for this user
+            $stmt = $this->db->prepare("SELECT id FROM device_tokens WHERE user_id = ? AND device_token = ?");
+            $stmt->execute([$user['uid'], $token]);
+            
+            if ($stmt->fetch()) {
+                Response::success("Device token already registered");
+                return;
+            }
+
+            // Insert new token
+            $stmt = $this->db->prepare("INSERT INTO device_tokens (user_id, device_token, device_type) VALUES (?, ?, ?)");
+            $stmt->execute([$user['uid'], $token, $type]);
+
+            Response::success("Device token registered successfully");
+        } catch (Exception $e) {
+            Response::error("Failed to register device token: " . $e->getMessage(), 500);
+        }
+    }
+
+    public function unregisterDeviceToken()
+    {
+        try {
+            $user = $this->auth->authenticate();
+            $data = $this->getPostData();
+
+            if (!isset($data['device_token'])) {
+                Response::error("Device token is required", 400);
+            }
+
+            $stmt = $this->db->prepare("DELETE FROM device_tokens WHERE user_id = ? AND device_token = ?");
+            $stmt->execute([$user['uid'], $data['device_token']]);
+
+            Response::success("Device token unregistered successfully");
+        } catch (Exception $e) {
+            Response::error("Failed to unregister device token: " . $e->getMessage(), 500);
+        }
+    }
 }

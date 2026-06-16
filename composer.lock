@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f44c433d331a7da7d7a1558d970ce8ec",
+    "content-hash": "d4e2f58730f31f2a7be3f651c968cf20",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -219,6 +219,68 @@
                 "source": "https://github.com/firebase/php-jwt/tree/v6.11.1"
             },
             "time": "2025-04-09T20:32:01+00:00"
+        },
+        {
+            "name": "google/auth",
+            "version": "v1.51.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/googleapis/google-auth-library-php.git",
+                "reference": "4c4776e398ff255e81b3b8c4373983f5e1b765bf"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/googleapis/google-auth-library-php/zipball/4c4776e398ff255e81b3b8c4373983f5e1b765bf",
+                "reference": "4c4776e398ff255e81b3b8c4373983f5e1b765bf",
+                "shasum": ""
+            },
+            "require": {
+                "firebase/php-jwt": "^6.0||^7.0",
+                "guzzlehttp/guzzle": "^7.4.5",
+                "guzzlehttp/psr7": "^2.4.5",
+                "php": "^8.1",
+                "psr/cache": "^2.0||^3.0",
+                "psr/http-message": "^1.1||^2.0",
+                "psr/log": "^2.0||^3.0"
+            },
+            "require-dev": {
+                "guzzlehttp/promises": "^2.0",
+                "kelvinmo/simplejwt": "^1.1.0",
+                "phpseclib/phpseclib": "^3.0.35",
+                "phpspec/prophecy-phpunit": "^2.1",
+                "phpunit/phpunit": "^9.6",
+                "sebastian/comparator": ">=1.2.3",
+                "squizlabs/php_codesniffer": "^4.0",
+                "symfony/filesystem": "^6.3||^7.3",
+                "symfony/process": "^6.0||^7.0",
+                "webmozart/assert": "^1.11||^2.0"
+            },
+            "suggest": {
+                "phpseclib/phpseclib": "May be used in place of OpenSSL for signing strings or for token management. Please require version ^2."
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Google\\Auth\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "description": "Google Auth Library for PHP",
+            "homepage": "https://github.com/google/google-auth-library-php",
+            "keywords": [
+                "Authentication",
+                "google",
+                "oauth2"
+            ],
+            "support": {
+                "docs": "https://cloud.google.com/php/docs/reference/auth/latest",
+                "issues": "https://github.com/googleapis/google-auth-library-php/issues",
+                "source": "https://github.com/googleapis/google-auth-library-php/tree/v1.51.0"
+            },
+            "time": "2026-06-10T00:39:33+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
@@ -614,6 +676,55 @@
             "time": "2024-09-04T18:46:31+00:00"
         },
         {
+            "name": "psr/cache",
+            "version": "3.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/php-fig/cache.git",
+                "reference": "aa5030cfa5405eccfdcb1083ce040c2cb8d253bf"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/php-fig/cache/zipball/aa5030cfa5405eccfdcb1083ce040c2cb8d253bf",
+                "reference": "aa5030cfa5405eccfdcb1083ce040c2cb8d253bf",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.0.0"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "1.0.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Psr\\Cache\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "PHP-FIG",
+                    "homepage": "https://www.php-fig.org/"
+                }
+            ],
+            "description": "Common interface for caching libraries",
+            "keywords": [
+                "cache",
+                "psr",
+                "psr-6"
+            ],
+            "support": {
+                "source": "https://github.com/php-fig/cache/tree/3.0.0"
+            },
+            "time": "2021-02-03T23:26:27+00:00"
+        },
+        {
             "name": "psr/http-client",
             "version": "1.0.3",
             "source": {
@@ -772,6 +883,56 @@
                 "source": "https://github.com/php-fig/http-message/tree/2.0"
             },
             "time": "2023-04-04T09:54:51+00:00"
+        },
+        {
+            "name": "psr/log",
+            "version": "3.0.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/php-fig/log.git",
+                "reference": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/php-fig/log/zipball/f16e1d5863e37f8d8c2a01719f5b34baa2b714d3",
+                "reference": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.0.0"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "3.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Psr\\Log\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "PHP-FIG",
+                    "homepage": "https://www.php-fig.org/"
+                }
+            ],
+            "description": "Common interface for logging libraries",
+            "homepage": "https://github.com/php-fig/log",
+            "keywords": [
+                "log",
+                "psr",
+                "psr-3"
+            ],
+            "support": {
+                "source": "https://github.com/php-fig/log/tree/3.0.2"
+            },
+            "time": "2024-09-11T13:17:53+00:00"
         },
         {
             "name": "ralouphie/getallheaders",

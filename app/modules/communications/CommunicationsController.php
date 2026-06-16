@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../core/BaseController.php';
+require_once __DIR__.'/../../helpers/notification_helper.php';
 
 class CommunicationsController extends BaseController {
   
@@ -251,6 +252,24 @@ class CommunicationsController extends BaseController {
         'society_id' => $user['society_id']
       ]);
 
+      // Notify Residents
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'resident' AND society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $residents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+      
+      if (!empty($residents)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $residents,
+              "New Notice",
+              $data['title'],
+              ['notice_id' => $noticeId],
+              'notice_created',
+              $noticeId,
+              '/communications/notices'
+          );
+      }
+
       Response::success("Notice created", ['notice_id' => $noticeId], 201);
     } catch (Exception $e) {
       error_log("Create notice error: " . $e->getMessage());
@@ -397,6 +416,43 @@ class CommunicationsController extends BaseController {
             'is_draft' => $data['is_draft'] ?? 1
         ]);
 
+        if (($data['is_draft'] ?? 1) == 0) {
+            $notificationHelper = new NotificationHelper();
+            if (!empty($data['target_group_id'])) {
+                // Notify group members
+                $stmt = $this->db->prepare("SELECT user_id FROM group_members WHERE group_id = ?");
+                $stmt->execute([$data['target_group_id']]);
+                $members = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                if (!empty($members)) {
+                    $notificationHelper->sendBulkNotifications(
+                        $members,
+                        "New Announcement",
+                        $data['title'],
+                        ['announcement_id' => $announcementId],
+                        'announcement_created',
+                        $announcementId,
+                        '/communications/announcements'
+                    );
+                }
+            } else {
+                // Notify all residents
+                $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'resident' AND society_id = ?");
+                $stmt->execute([$user['society_id']]);
+                $residents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                if (!empty($residents)) {
+                    $notificationHelper->sendBulkNotifications(
+                        $residents,
+                        "New Announcement",
+                        $data['title'],
+                        ['announcement_id' => $announcementId],
+                        'announcement_created',
+                        $announcementId,
+                        '/communications/announcements'
+                    );
+                }
+            }
+        }
+
         Response::success("Announcement created successfully", ['announcement_id' => $announcementId], 201);
     } catch (Exception $e) {
         error_log("Create announcement error: " . $e->getMessage());
@@ -530,6 +586,24 @@ class CommunicationsController extends BaseController {
         ]);
       }
       
+      // Notify Residents
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'resident' AND society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $residents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+      
+      if (!empty($residents)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $residents,
+              "New Poll",
+              $data['question'],
+              ['poll_id' => $pollId],
+              'poll_created',
+              $pollId,
+              '/communications/polls'
+          );
+      }
+
       Response::success("Poll created successfully", ['poll_id' => $pollId], 201);
       
     } catch(Exception $e) {

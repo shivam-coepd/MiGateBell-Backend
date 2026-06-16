@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../core/BaseController.php';
+require_once __DIR__ . '/../../helpers/notification_helper.php';
 
 class HelpdeskController extends BaseController
 {
@@ -53,6 +54,24 @@ class HelpdeskController extends BaseController
         'resident_id' => $residentId,
         'society_id' => $user['society_id']
       ]);
+
+      // Notify Admin
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'admin' AND society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $admins = $stmt->fetchAll(PDO::FETCH_COLUMN);
+      
+      if (!empty($admins)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $admins,
+              "New Helpdesk Ticket",
+              "A new {$priority} priority ticket has been created.",
+              ['ticket_id' => $ticketId],
+              'ticket_created',
+              $ticketId,
+              '/admin/helpdesk'
+          );
+      }
 
       Response::success("Ticket created successfully", ['ticket_id' => $ticketId], 201);
 
@@ -382,6 +401,18 @@ class HelpdeskController extends BaseController
       if ($updated === 0) {
         Response::error("Failed to assign ticket", 500);
       }
+
+      // Notify Assigned User
+      $notificationHelper = new NotificationHelper();
+      $notificationHelper->sendPushNotification(
+          $data['assigned_to'],
+          "Ticket Assigned",
+          "You have been assigned to Ticket #{$id}.",
+          ['ticket_id' => $id],
+          'ticket_assigned',
+          $id,
+          '/staff/helpdesk'
+      );
 
       Response::success("Ticket assigned successfully");
 

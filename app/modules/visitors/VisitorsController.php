@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../core/BaseController.php';
+require_once __DIR__.'/../../helpers/notification_helper.php';
 
 class VisitorsController extends BaseController {
   
@@ -99,6 +100,37 @@ class VisitorsController extends BaseController {
         'image_url' => $data['image_url'] ?? null
       ]);
       
+      // FIREBASE NOTIFICATION
+      $notificationHelper = new NotificationHelper();
+      if ($user['role'] === 'guard') {
+          // Notify Resident
+          $notificationHelper->sendPushNotification(
+              $residentId,
+              "New Visitor at Gate",
+              "{$data['name']} is requesting entry for {$data['purpose']}.",
+              ['visitor_id' => $visitorId],
+              'visitor_request',
+              $visitorId,
+              '/visitor_details'
+          );
+      } else if ($user['role'] === 'resident') {
+          // Notify Guards in Society
+          $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'guard' AND society_id = ?");
+          $stmt->execute([$societyId]);
+          $guards = $stmt->fetchAll(PDO::FETCH_COLUMN);
+          if (!empty($guards)) {
+              $notificationHelper->sendBulkNotifications(
+                  $guards,
+                  "Expected Visitor",
+                  "Resident has pre-approved visitor {$data['name']}.",
+                  ['visitor_id' => $visitorId],
+                  'visitor_pre_approval',
+                  $visitorId,
+                  '/guard/visitor_details'
+              );
+          }
+      }
+
       Response::success("Visitor added successfully", ['visitor_id' => $visitorId], 201);
       
     } catch(Exception $e) {
@@ -264,6 +296,52 @@ class VisitorsController extends BaseController {
       
       if ($updated === 0) {
         Response::error("Failed to update visitor status", 500);
+      }
+
+      // FIREBASE NOTIFICATION
+      $notificationHelper = new NotificationHelper();
+      if ($user['role'] === 'resident' && in_array($data['status'], ['approved', 'rejected'])) {
+          // Notify the guard who created the record, or all guards
+          $guardId = $visitor['guard_id'] ?? null;
+          $message = $data['status'] === 'approved' ? "Entry Approved" : "Entry Denied";
+          
+          if ($guardId) {
+             $notificationHelper->sendPushNotification(
+                 $guardId,
+                 "Visitor Status Update",
+                 "Resident has {$data['status']} the visitor.",
+                 ['visitor_id' => $id],
+                 'visitor_status',
+                 $id,
+                 '/guard/visitor_details'
+             );
+          } else {
+             $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'guard' AND society_id = ?");
+             $stmt->execute([$user['society_id']]);
+             $guards = $stmt->fetchAll(PDO::FETCH_COLUMN);
+             if (!empty($guards)) {
+                 $notificationHelper->sendBulkNotifications(
+                     $guards,
+                     "Visitor Status Update",
+                     "Resident has {$data['status']} the visitor.",
+                     ['visitor_id' => $id],
+                     'visitor_status',
+                     $id,
+                     '/guard/visitor_details'
+                 );
+             }
+          }
+      } else if (in_array($data['status'], ['entered', 'exited'])) {
+          // Notify Resident
+          $notificationHelper->sendPushNotification(
+              $visitor['resident_id'],
+              "Visitor Update",
+              "Your visitor has {$data['status']} the premises.",
+              ['visitor_id' => $id],
+              'visitor_status',
+              $id,
+              '/visitor_details'
+          );
       }
       
       Response::success("Visitor status updated successfully", $updateData);

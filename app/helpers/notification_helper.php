@@ -11,22 +11,124 @@ class NotificationHelper {
     }
   }
   
-  public function sendPushNotification($userId, $title, $message, $data = []) {
-    // In a real implementation, this would integrate with a push notification service
-    // For now, we'll just log the notification
+  private function getFcmAccessToken() {
+    // Requires a service account JSON file from Firebase Console
+    $credentialsPath = __DIR__ . '/../config/firebase_credentials.json';
     
+    if (!file_exists($credentialsPath)) {
+      error_log("FCM error: Firebase credentials file not found at $credentialsPath");
+      return null;
+    }
+
     try {
-      // Log notification to database
+      $client = new \Google\Auth\Credentials\ServiceAccountCredentials(
+        'https://www.googleapis.com/auth/firebase.messaging',
+        $credentialsPath
+      );
+      
+      $token = $client->fetchAuthToken();
+      return $token['access_token'] ?? null;
+    } catch (\Exception $e) {
+      error_log("FCM get auth token error: " . $e->getMessage());
+      return null;
+    }
+  }
+
+  public function sendPushNotification($userId, $title, $message, $data = [], $type = 'general', $referenceId = null, $actionUrl = null) {
+    try {
+      // 1. Log notification to database
       $stmt = $this->db->prepare("
-        INSERT INTO notifications (user_id, title, message, data, created_at)
-        VALUES (?, ?, ?, ?, NOW())
+        INSERT INTO notifications (user_id, title, message, type, reference_id, action_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
       ");
-      $stmt->execute([$userId, $title, $message, json_encode($data)]);
+      $stmt->execute([$userId, $title, $message, $type, $referenceId, $actionUrl]);
       
       $notificationId = $this->db->lastInsertId();
       
-      // In a real implementation, you would send the actual push notification here
-      // For example, integrating with Firebase Cloud Messaging (FCM)
+      // 2. Send actual push notification via FCM HTTP v1 API
+      // Get user's device tokens
+      $stmt = $this->db->prepare("SELECT device_token FROM device_tokens WHERE user_id = ?");
+      $stmt->execute([$userId]);
+      $tokens = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+      if (empty($tokens)) {
+        return $notificationId; // User has no registered devices, but notification is logged
+      }
+
+      $accessToken = $this->getFcmAccessToken();
+      if (!$accessToken) {
+        return $notificationId; // Could not get access token, but logged locally
+      }
+
+      // We need the Project ID from the credentials file
+      $credentials = json_decode(file_get_contents(__DIR__ . '/../config/firebase_credentials.json'), true);
+      $projectId = $credentials['project_id'] ?? null;
+      
+      if (!$projectId) {
+        error_log("FCM error: Project ID not found in credentials file.");
+        return $notificationId;
+      }
+
+      $url = "https://fcm.googleapis.com/v1/projects/$projectId/messages:send";
+
+      // Include additional metadata in data payload for the Flutter app
+      $payloadData = array_merge($data, [
+          'notification_id' => (string) $notificationId,
+          'type' => (string) $type,
+          'reference_id' => (string) $referenceId,
+          'action_url' => (string) $actionUrl
+      ]);
+
+      // Remove nulls from payloadData and convert everything to strings as FCM requires string values in data payload
+      foreach ($payloadData as $key => $val) {
+        if ($val === null || $val === '') {
+          unset($payloadData[$key]);
+        } else {
+          $payloadData[$key] = (string) $val;
+        }
+      }
+
+      foreach ($tokens as $deviceToken) {
+        $messageData = [
+          'message' => [
+            'token' => $deviceToken,
+            'notification' => [
+              'title' => $title,
+              'body' => $message
+            ],
+            'data' => $payloadData
+          ]
+        ];
+
+        // Send via cURL
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+          'Authorization: Bearer ' . $accessToken,
+          'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($messageData));
+        
+        $result = curl_exec($ch);
+        
+        if ($result === FALSE) {
+          error_log('FCM curl Error: ' . curl_error($ch));
+        } else {
+          $response = json_decode($result, true);
+          if (isset($response['error'])) {
+             error_log('FCM API Error for token ' . $deviceToken . ': ' . json_encode($response['error']));
+             // Optional: If error is UNREGISTERED, remove token from DB
+             if ($response['error']['status'] === 'NOT_FOUND' || (isset($response['error']['details'][0]['errorCode']) && $response['error']['details'][0]['errorCode'] === 'UNREGISTERED')) {
+                $delStmt = $this->db->prepare("DELETE FROM device_tokens WHERE device_token = ?");
+                $delStmt->execute([$deviceToken]);
+             }
+          }
+        }
+        curl_close($ch);
+      }
       
       return $notificationId;
     } catch(Exception $e) {
@@ -83,13 +185,13 @@ class NotificationHelper {
     }
   }
   
-  public function sendBulkNotifications($userIds, $title, $message, $data = []) {
+  public function sendBulkNotifications($userIds, $title, $message, $data = [], $type = 'general', $referenceId = null, $actionUrl = null) {
     $successCount = 0;
     $failures = [];
     
     foreach ($userIds as $userId) {
       try {
-        $result = $this->sendPushNotification($userId, $title, $message, $data);
+        $result = $this->sendPushNotification($userId, $title, $message, $data, $type, $referenceId, $actionUrl);
         if ($result) {
           $successCount++;
         } else {
@@ -107,7 +209,7 @@ class NotificationHelper {
     ];
   }
   
-  public function sendGroupNotification($groupId, $title, $message, $data = []) {
+  public function sendGroupNotification($groupId, $title, $message, $data = [], $type = 'general', $referenceId = null, $actionUrl = null) {
     try {
       // Get all members of the group
       $stmt = $this->db->prepare("
@@ -120,7 +222,7 @@ class NotificationHelper {
       
       $userIds = array_column($members, 'user_id');
       
-      return $this->sendBulkNotifications($userIds, $title, $message, $data);
+      return $this->sendBulkNotifications($userIds, $title, $message, $data, $type, $referenceId, $actionUrl);
     } catch(Exception $e) {
       error_log("Group notification error: " . $e->getMessage());
       return false;

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../core/BaseController.php';
+require_once __DIR__.'/../../helpers/notification_helper.php';
 
 class AmenitiesController extends BaseController {
   
@@ -248,6 +249,24 @@ class AmenitiesController extends BaseController {
         'status' => 'requested',
         'total_amount' => $amenity['booking_fee']
       ]);
+
+      // Notify Admin
+      $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'admin' AND society_id = ?");
+      $stmt->execute([$user['society_id']]);
+      $admins = $stmt->fetchAll(PDO::FETCH_COLUMN);
+      
+      if (!empty($admins)) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendBulkNotifications(
+              $admins,
+              "New Amenity Booking Request",
+              "A resident has requested to book an amenity.",
+              ['booking_id' => $bookingId],
+              'amenity_booking_requested',
+              $bookingId,
+              '/admin/amenities/bookings'
+          );
+      }
       
       Response::success("Amenity booking requested successfully", ['booking_id' => $bookingId], 201);
       
@@ -354,6 +373,23 @@ class AmenitiesController extends BaseController {
       
       if ($updated === 0) {
         Response::error("Failed to update booking status", 500);
+      }
+
+      // Notify Resident
+      $stmt = $this->db->prepare("SELECT resident_id FROM amenity_bookings WHERE id = ?");
+      $stmt->execute([$bookingId]);
+      $res = $stmt->fetch();
+      if ($res && $res['resident_id']) {
+          $notificationHelper = new NotificationHelper();
+          $notificationHelper->sendPushNotification(
+              $res['resident_id'],
+              "Booking Status Updated",
+              "Your amenity booking status is now: {$data['status']}.",
+              ['booking_id' => $bookingId],
+              'booking_status_updated',
+              $bookingId,
+              '/amenities/bookings'
+          );
       }
       
       Response::success("Booking status updated successfully");

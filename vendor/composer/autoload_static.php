@@ -10,8 +10,8 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         '7b11c4dc42b3b3023073cb14e519683c' => __DIR__ . '/..' . '/ralouphie/getallheaders/src/getallheaders.php',
         '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
         '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
-        '320cde22f66dd4f5d3fd621d3e88b98f' => __DIR__ . '/..' . '/symfony/polyfill-ctype/bootstrap.php',
         '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
+        '320cde22f66dd4f5d3fd621d3e88b98f' => __DIR__ . '/..' . '/symfony/polyfill-ctype/bootstrap.php',
         'b067bc7112e384b61c701452d53a14a8' => __DIR__ . '/..' . '/mtdowling/jmespath.php/src/JmesPath.php',
         '6124b4c8570aa390c21fafd04a26c69f' => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy/deep_copy.php',
         '8a9dc1de0ca7e01f3e08231539562f61' => __DIR__ . '/..' . '/aws/aws-sdk-php/src/functions.php',
@@ -27,8 +27,10 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         ),
         'P' =>
         array (
+            'Psr\\Log\\' => 8,
             'Psr\\Http\\Message\\' => 17,
             'Psr\\Http\\Client\\' => 16,
+            'Psr\\Cache\\' => 10,
             'PhpParser\\' => 10,
         ),
         'M' =>
@@ -44,6 +46,7 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
             'GuzzleHttp\\Psr7\\' => 16,
             'GuzzleHttp\\Promise\\' => 19,
             'GuzzleHttp\\' => 11,
+            'Google\\Auth\\' => 12,
         ),
         'F' =>
         array (
@@ -73,6 +76,10 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         array (
             0 => __DIR__ . '/..' . '/symfony/filesystem',
         ),
+        'Psr\\Log\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/psr/log/src',
+        ),
         'Psr\\Http\\Message\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/http-factory/src',
@@ -81,6 +88,10 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         'Psr\\Http\\Client\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/http-client/src',
+        ),
+        'Psr\\Cache\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/psr/cache/src',
         ),
         'PhpParser\\' =>
         array (
@@ -105,6 +116,10 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         'GuzzleHttp\\' =>
         array (
             0 => __DIR__ . '/..' . '/guzzlehttp/guzzle/src',
+        ),
+        'Google\\Auth\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/google/auth/src',
         ),
         'Firebase\\JWT\\' =>
         array (
@@ -1431,6 +1446,57 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         'Firebase\\JWT\\JWTExceptionWithPayloadInterface' => __DIR__ . '/..' . '/firebase/php-jwt/src/JWTExceptionWithPayloadInterface.php',
         'Firebase\\JWT\\Key' => __DIR__ . '/..' . '/firebase/php-jwt/src/Key.php',
         'Firebase\\JWT\\SignatureInvalidException' => __DIR__ . '/..' . '/firebase/php-jwt/src/SignatureInvalidException.php',
+        'Google\\Auth\\AccessToken' => __DIR__ . '/..' . '/google/auth/src/AccessToken.php',
+        'Google\\Auth\\ApplicationDefaultCredentials' => __DIR__ . '/..' . '/google/auth/src/ApplicationDefaultCredentials.php',
+        'Google\\Auth\\CacheTrait' => __DIR__ . '/..' . '/google/auth/src/CacheTrait.php',
+        'Google\\Auth\\Cache\\FileSystemCacheItemPool' => __DIR__ . '/..' . '/google/auth/src/Cache/FileSystemCacheItemPool.php',
+        'Google\\Auth\\Cache\\InvalidArgumentException' => __DIR__ . '/..' . '/google/auth/src/Cache/InvalidArgumentException.php',
+        'Google\\Auth\\Cache\\MemoryCacheItemPool' => __DIR__ . '/..' . '/google/auth/src/Cache/MemoryCacheItemPool.php',
+        'Google\\Auth\\Cache\\SysVCacheItemPool' => __DIR__ . '/..' . '/google/auth/src/Cache/SysVCacheItemPool.php',
+        'Google\\Auth\\Cache\\TypedItem' => __DIR__ . '/..' . '/google/auth/src/Cache/TypedItem.php',
+        'Google\\Auth\\CredentialSource\\AwsNativeSource' => __DIR__ . '/..' . '/google/auth/src/CredentialSource/AwsNativeSource.php',
+        'Google\\Auth\\CredentialSource\\ExecutableSource' => __DIR__ . '/..' . '/google/auth/src/CredentialSource/ExecutableSource.php',
+        'Google\\Auth\\CredentialSource\\FileSource' => __DIR__ . '/..' . '/google/auth/src/CredentialSource/FileSource.php',
+        'Google\\Auth\\CredentialSource\\UrlSource' => __DIR__ . '/..' . '/google/auth/src/CredentialSource/UrlSource.php',
+        'Google\\Auth\\CredentialsLoader' => __DIR__ . '/..' . '/google/auth/src/CredentialsLoader.php',
+        'Google\\Auth\\Credentials\\AppIdentityCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/AppIdentityCredentials.php',
+        'Google\\Auth\\Credentials\\ExternalAccountAuthorizedUserCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/ExternalAccountAuthorizedUserCredentials.php',
+        'Google\\Auth\\Credentials\\ExternalAccountCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/ExternalAccountCredentials.php',
+        'Google\\Auth\\Credentials\\GCECredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/GCECredentials.php',
+        'Google\\Auth\\Credentials\\IAMCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/IAMCredentials.php',
+        'Google\\Auth\\Credentials\\ImpersonatedServiceAccountCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/ImpersonatedServiceAccountCredentials.php',
+        'Google\\Auth\\Credentials\\InsecureCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/InsecureCredentials.php',
+        'Google\\Auth\\Credentials\\ServiceAccountCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/ServiceAccountCredentials.php',
+        'Google\\Auth\\Credentials\\ServiceAccountJwtAccessCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/ServiceAccountJwtAccessCredentials.php',
+        'Google\\Auth\\Credentials\\UserRefreshCredentials' => __DIR__ . '/..' . '/google/auth/src/Credentials/UserRefreshCredentials.php',
+        'Google\\Auth\\ExecutableHandler\\ExecutableHandler' => __DIR__ . '/..' . '/google/auth/src/ExecutableHandler/ExecutableHandler.php',
+        'Google\\Auth\\ExecutableHandler\\ExecutableResponseError' => __DIR__ . '/..' . '/google/auth/src/ExecutableHandler/ExecutableResponseError.php',
+        'Google\\Auth\\ExternalAccountCredentialSourceInterface' => __DIR__ . '/..' . '/google/auth/src/ExternalAccountCredentialSourceInterface.php',
+        'Google\\Auth\\FetchAuthTokenCache' => __DIR__ . '/..' . '/google/auth/src/FetchAuthTokenCache.php',
+        'Google\\Auth\\FetchAuthTokenInterface' => __DIR__ . '/..' . '/google/auth/src/FetchAuthTokenInterface.php',
+        'Google\\Auth\\GCECache' => __DIR__ . '/..' . '/google/auth/src/GCECache.php',
+        'Google\\Auth\\GetQuotaProjectInterface' => __DIR__ . '/..' . '/google/auth/src/GetQuotaProjectInterface.php',
+        'Google\\Auth\\GetUniverseDomainInterface' => __DIR__ . '/..' . '/google/auth/src/GetUniverseDomainInterface.php',
+        'Google\\Auth\\HttpHandler\\Guzzle6HttpHandler' => __DIR__ . '/..' . '/google/auth/src/HttpHandler/Guzzle6HttpHandler.php',
+        'Google\\Auth\\HttpHandler\\Guzzle7HttpHandler' => __DIR__ . '/..' . '/google/auth/src/HttpHandler/Guzzle7HttpHandler.php',
+        'Google\\Auth\\HttpHandler\\HttpClientCache' => __DIR__ . '/..' . '/google/auth/src/HttpHandler/HttpClientCache.php',
+        'Google\\Auth\\HttpHandler\\HttpHandlerFactory' => __DIR__ . '/..' . '/google/auth/src/HttpHandler/HttpHandlerFactory.php',
+        'Google\\Auth\\Iam' => __DIR__ . '/..' . '/google/auth/src/Iam.php',
+        'Google\\Auth\\IamSignerTrait' => __DIR__ . '/..' . '/google/auth/src/IamSignerTrait.php',
+        'Google\\Auth\\Logging\\LoggingTrait' => __DIR__ . '/..' . '/google/auth/src/Logging/LoggingTrait.php',
+        'Google\\Auth\\Logging\\RpcLogEvent' => __DIR__ . '/..' . '/google/auth/src/Logging/RpcLogEvent.php',
+        'Google\\Auth\\Logging\\StdOutLogger' => __DIR__ . '/..' . '/google/auth/src/Logging/StdOutLogger.php',
+        'Google\\Auth\\MetricsTrait' => __DIR__ . '/..' . '/google/auth/src/MetricsTrait.php',
+        'Google\\Auth\\Middleware\\AuthTokenMiddleware' => __DIR__ . '/..' . '/google/auth/src/Middleware/AuthTokenMiddleware.php',
+        'Google\\Auth\\Middleware\\ProxyAuthTokenMiddleware' => __DIR__ . '/..' . '/google/auth/src/Middleware/ProxyAuthTokenMiddleware.php',
+        'Google\\Auth\\Middleware\\ScopedAccessTokenMiddleware' => __DIR__ . '/..' . '/google/auth/src/Middleware/ScopedAccessTokenMiddleware.php',
+        'Google\\Auth\\Middleware\\SimpleMiddleware' => __DIR__ . '/..' . '/google/auth/src/Middleware/SimpleMiddleware.php',
+        'Google\\Auth\\OAuth2' => __DIR__ . '/..' . '/google/auth/src/OAuth2.php',
+        'Google\\Auth\\ProjectIdProviderInterface' => __DIR__ . '/..' . '/google/auth/src/ProjectIdProviderInterface.php',
+        'Google\\Auth\\ServiceAccountSignerTrait' => __DIR__ . '/..' . '/google/auth/src/ServiceAccountSignerTrait.php',
+        'Google\\Auth\\SignBlobInterface' => __DIR__ . '/..' . '/google/auth/src/SignBlobInterface.php',
+        'Google\\Auth\\UpdateMetadataInterface' => __DIR__ . '/..' . '/google/auth/src/UpdateMetadataInterface.php',
+        'Google\\Auth\\UpdateMetadataTrait' => __DIR__ . '/..' . '/google/auth/src/UpdateMetadataTrait.php',
         'GuzzleHttp\\BodySummarizer' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/BodySummarizer.php',
         'GuzzleHttp\\BodySummarizerInterface' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/BodySummarizerInterface.php',
         'GuzzleHttp\\Client' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/Client.php',
@@ -2218,6 +2284,10 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         'PhpParser\\PrettyPrinterAbstract' => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser/PrettyPrinterAbstract.php',
         'PhpParser\\PrettyPrinter\\Standard' => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser/PrettyPrinter/Standard.php',
         'PhpParser\\Token' => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser/Token.php',
+        'Psr\\Cache\\CacheException' => __DIR__ . '/..' . '/psr/cache/src/CacheException.php',
+        'Psr\\Cache\\CacheItemInterface' => __DIR__ . '/..' . '/psr/cache/src/CacheItemInterface.php',
+        'Psr\\Cache\\CacheItemPoolInterface' => __DIR__ . '/..' . '/psr/cache/src/CacheItemPoolInterface.php',
+        'Psr\\Cache\\InvalidArgumentException' => __DIR__ . '/..' . '/psr/cache/src/InvalidArgumentException.php',
         'Psr\\Http\\Client\\ClientExceptionInterface' => __DIR__ . '/..' . '/psr/http-client/src/ClientExceptionInterface.php',
         'Psr\\Http\\Client\\ClientInterface' => __DIR__ . '/..' . '/psr/http-client/src/ClientInterface.php',
         'Psr\\Http\\Client\\NetworkExceptionInterface' => __DIR__ . '/..' . '/psr/http-client/src/NetworkExceptionInterface.php',
@@ -2235,6 +2305,14 @@ class ComposerStaticInitd751713988987e9331980363e24189ce
         'Psr\\Http\\Message\\UploadedFileInterface' => __DIR__ . '/..' . '/psr/http-message/src/UploadedFileInterface.php',
         'Psr\\Http\\Message\\UriFactoryInterface' => __DIR__ . '/..' . '/psr/http-factory/src/UriFactoryInterface.php',
         'Psr\\Http\\Message\\UriInterface' => __DIR__ . '/..' . '/psr/http-message/src/UriInterface.php',
+        'Psr\\Log\\AbstractLogger' => __DIR__ . '/..' . '/psr/log/src/AbstractLogger.php',
+        'Psr\\Log\\InvalidArgumentException' => __DIR__ . '/..' . '/psr/log/src/InvalidArgumentException.php',
+        'Psr\\Log\\LogLevel' => __DIR__ . '/..' . '/psr/log/src/LogLevel.php',
+        'Psr\\Log\\LoggerAwareInterface' => __DIR__ . '/..' . '/psr/log/src/LoggerAwareInterface.php',
+        'Psr\\Log\\LoggerAwareTrait' => __DIR__ . '/..' . '/psr/log/src/LoggerAwareTrait.php',
+        'Psr\\Log\\LoggerInterface' => __DIR__ . '/..' . '/psr/log/src/LoggerInterface.php',
+        'Psr\\Log\\LoggerTrait' => __DIR__ . '/..' . '/psr/log/src/LoggerTrait.php',
+        'Psr\\Log\\NullLogger' => __DIR__ . '/..' . '/psr/log/src/NullLogger.php',
         'SebastianBergmann\\CliParser\\AmbiguousOptionException' => __DIR__ . '/..' . '/sebastian/cli-parser/src/exceptions/AmbiguousOptionException.php',
         'SebastianBergmann\\CliParser\\Exception' => __DIR__ . '/..' . '/sebastian/cli-parser/src/exceptions/Exception.php',
         'SebastianBergmann\\CliParser\\OptionDoesNotAllowArgumentException' => __DIR__ . '/..' . '/sebastian/cli-parser/src/exceptions/OptionDoesNotAllowArgumentException.php',
