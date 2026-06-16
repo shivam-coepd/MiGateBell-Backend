@@ -9,6 +9,11 @@ error_reporting(E_ALL);
 // Buffer all output so stray warnings/notices don't corrupt JSON responses
 ob_start();
 
+// Include composer autoloader for dependencies (like Google Auth for FCM)
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 // 2. Set Headers
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");

@@ -3,119 +3,128 @@ require_once __DIR__ . '/../../core/BaseController.php';
 
 class NotificationController extends BaseController
 {
-
+    // ─── GET /api/notifications ──────────────────────────────────────────────
     public function getNotifications()
     {
         try {
-            $user = $this->auth->authenticate();
-            $page = isset($_GET['page']) ? (int) $_GET['page'] : 1;
-            $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 20;
-            $pagination = $this->paginate($page, $limit);
+            $user  = $this->auth->authenticate();
+            $uid   = $user['uid'];
+            $page  = isset($_GET['page'])  ? max(1, (int) $_GET['page'])        : 1;
+            $limit = isset($_GET['limit']) ? min(50, max(1, (int) $_GET['limit'])) : 20;
+            $offset = ($page - 1) * $limit;
 
-            // Get total (unread count could be separate)
-            $stmt = $this->db->prepare("SELECT count(*) as count FROM notifications WHERE user_id = ?");
-            $stmt->execute([$user['uid']]);
-            $total = $stmt->fetch()['count'];
+            // Total count
+            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ?");
+            $stmt->execute([$uid]);
+            $total = (int) $stmt->fetch()['count'];
 
-            $stmt = $this->db->prepare("SELECT count(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
-            $stmt->execute([$user['uid']]);
-            $unreadCount = $stmt->fetch()['count'];
+            // Unread count
+            $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
+            $stmt->execute([$uid]);
+            $unreadCount = (int) $stmt->fetch()['count'];
 
-            // Get notifications
-            $stmt = $this->db->prepare("
-                SELECT * FROM notifications 
-                WHERE user_id = ? 
-                ORDER BY created_at DESC 
-                LIMIT :limit OFFSET :offset
-            ");
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
-            // $stmt->bindValue(':uid', $user['uid']); // Cannot reuse parameter name in PDO emulation sometimes? 
-            $stmt->execute([':limit' => $limit, ':offset' => 0, 'dummy' => 0]); // Wait, PDO standard binding.
-
-            // Re-doing simple bind
-            $sql = "SELECT * FROM notifications WHERE user_id = :uid ORDER BY created_at DESC LIMIT :limit OFFSET :offset";
-            $stmt = $this->db->prepare($sql);
-            $stmt->bindValue(':uid', $user['uid'], PDO::PARAM_INT);
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->bindValue(':offset', ($page - 1) * $limit, PDO::PARAM_INT);
+            // Paginated notifications
+            $stmt = $this->db->prepare(
+                "SELECT * FROM notifications WHERE user_id = :uid ORDER BY created_at DESC LIMIT :lim OFFSET :off"
+            );
+            $stmt->bindValue(':uid', $uid,    PDO::PARAM_INT);
+            $stmt->bindValue(':lim', $limit,  PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $stmt->execute();
+            $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $notifications = $stmt->fetchAll();
-
-            $this->sendPaginatedResponse($notifications, $total, $pagination, "Notifications retrieved", ['unread_count' => $unreadCount]);
-
+            Response::success("Notifications retrieved", [
+                'notifications'  => $notifications,
+                'unread_count'   => $unreadCount,
+                'total'          => $total,
+                'page'           => $page,
+                'limit'          => $limit,
+                'has_more'       => ($offset + $limit) < $total,
+            ]);
         } catch (Exception $e) {
-            error_log("Get notifications error: " . $e->getMessage());
             Response::error("Failed to retrieve notifications: " . $e->getMessage(), 500);
         }
     }
 
+    // ─── PUT /api/notifications/{id}/read ────────────────────────────────────
     public function markAsRead($id)
     {
         try {
             $user = $this->auth->authenticate();
-            // Verify ownership
-            $stmt = $this->db->prepare("SELECT id FROM notifications WHERE id = ? AND user_id = ?");
-            $stmt->execute([$id, $user['uid']]);
-            if (!$stmt->fetch())
-                Response::notFound("Notification not found");
 
-            $this->update('notifications', ['is_read' => 1, 'read_at' => date('Y-m-d H:i:s')], 'id = :id', ['id' => $id]);
+            $stmt = $this->db->prepare(
+                "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?"
+            );
+            $stmt->execute([$id, $user['uid']]);
+
+            if ($stmt->rowCount() === 0) {
+                Response::error("Notification not found or already read", 404);
+                return;
+            }
+
             Response::success("Notification marked as read");
         } catch (Exception $e) {
-            Response::error("Failed to mark read: " . $e->getMessage(), 500);
+            Response::error("Failed to mark notification as read: " . $e->getMessage(), 500);
         }
     }
 
+    // ─── PUT /api/notifications/read-all ─────────────────────────────────────
     public function markAllAsRead()
     {
         try {
             $user = $this->auth->authenticate();
-            $this->update('notifications', ['is_read' => 1, 'read_at' => date('Y-m-d H:i:s')], 'user_id = :user_id AND is_read = 0', ['user_id' => $user['uid']]);
-            Response::success("All notifications marked as read");
+
+            $stmt = $this->db->prepare(
+                "UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0"
+            );
+            $stmt->execute([$user['uid']]);
+
+            Response::success("All notifications marked as read", ['updated' => $stmt->rowCount()]);
         } catch (Exception $e) {
-            Response::error("Failed to mark all read: " . $e->getMessage(), 500);
+            Response::error("Failed to mark all as read: " . $e->getMessage(), 500);
         }
     }
 
+    // ─── GET /api/notifications/unread-count ─────────────────────────────────
     public function getUnreadCount()
     {
         try {
             $user = $this->auth->authenticate();
-            $stmt = $this->db->prepare("SELECT count(*) as count FROM notifications WHERE user_id = ? AND is_read = 0");
+
+            $stmt = $this->db->prepare(
+                "SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0"
+            );
             $stmt->execute([$user['uid']]);
-            $unreadCount = $stmt->fetch()['count'];
-            Response::success("Unread count retrieved", ['count' => $unreadCount]);
+            $count = (int) $stmt->fetch()['count'];
+
+            Response::success("Unread count retrieved", ['count' => $count]);
         } catch (Exception $e) {
             Response::error("Failed to retrieve unread count: " . $e->getMessage(), 500);
         }
     }
 
+    // ─── POST /api/notifications/tokens ──────────────────────────────────────
     public function registerDeviceToken()
     {
         try {
             $user = $this->auth->authenticate();
-            $data = $this->getPostData();
+            $data = json_decode(file_get_contents("php://input"), true) ?? [];
 
-            if (!isset($data['device_token']) || !isset($data['device_type'])) {
-                Response::error("Device token and type are required", 400);
-            }
-
-            $token = $data['device_token'];
-            $type = in_array($data['device_type'], ['android', 'ios', 'web']) ? $data['device_type'] : 'android';
-
-            // Check if token already exists for this user
-            $stmt = $this->db->prepare("SELECT id FROM device_tokens WHERE user_id = ? AND device_token = ?");
-            $stmt->execute([$user['uid'], $token]);
-            
-            if ($stmt->fetch()) {
-                Response::success("Device token already registered");
+            if (empty($data['device_token']) || empty($data['device_type'])) {
+                Response::error("device_token and device_type are required", 400);
                 return;
             }
 
-            // Insert new token
-            $stmt = $this->db->prepare("INSERT INTO device_tokens (user_id, device_token, device_type) VALUES (?, ?, ?)");
+            $token = trim($data['device_token']);
+            $type  = in_array($data['device_type'], ['android', 'ios', 'web'])
+                     ? $data['device_type'] : 'android';
+
+            // Upsert: update timestamp if already exists, otherwise insert
+            $stmt = $this->db->prepare(
+                "INSERT INTO device_tokens (user_id, device_token, device_type)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE device_type = VALUES(device_type), updated_at = NOW()"
+            );
             $stmt->execute([$user['uid'], $token, $type]);
 
             Response::success("Device token registered successfully");
@@ -124,17 +133,21 @@ class NotificationController extends BaseController
         }
     }
 
+    // ─── POST /api/notifications/tokens/unregister ───────────────────────────
     public function unregisterDeviceToken()
     {
         try {
             $user = $this->auth->authenticate();
-            $data = $this->getPostData();
+            $data = json_decode(file_get_contents("php://input"), true) ?? [];
 
-            if (!isset($data['device_token'])) {
-                Response::error("Device token is required", 400);
+            if (empty($data['device_token'])) {
+                Response::error("device_token is required", 400);
+                return;
             }
 
-            $stmt = $this->db->prepare("DELETE FROM device_tokens WHERE user_id = ? AND device_token = ?");
+            $stmt = $this->db->prepare(
+                "DELETE FROM device_tokens WHERE user_id = ? AND device_token = ?"
+            );
             $stmt->execute([$user['uid'], $data['device_token']]);
 
             Response::success("Device token unregistered successfully");
