@@ -17,10 +17,10 @@ class CommunityController extends BaseController {
       $total = $countStmt->fetch()['count'];
       
       $sql = "
-        SELECT p.*, u.name as user_name, u.avatar_url, f.unit_number as unit
+        SELECT p.*, u.name as user_name, u.profile_image as avatar_url, f.flat_number as unit
         FROM community_posts p
         LEFT JOIN users u ON p.user_id = u.id
-        LEFT JOIN flats f ON u.flat_id = f.id
+        LEFT JOIN flats f ON (f.owner_id = u.id OR f.tenant_id = u.id)
         WHERE p.society_id = :society_id
         ORDER BY p.created_at DESC
         LIMIT :limit OFFSET :offset
