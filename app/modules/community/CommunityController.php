@@ -135,4 +135,72 @@ class CommunityController extends BaseController {
       Response::error("Failed to like/unlike post: " . $e->getMessage(), 500);
     }
   }
+  public function getComments($postId) {
+    try {
+      $user = $this->auth->authenticate();
+      
+      $sql = "
+        SELECT c.*, u.name as user_name, u.profile_image as avatar_url, f.flat_number as unit
+        FROM community_post_comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        LEFT JOIN flats f ON (f.owner_id = u.id OR f.tenant_id = u.id)
+        WHERE c.post_id = ?
+        ORDER BY c.created_at ASC
+      ";
+      
+      $stmt = $this->db->prepare($sql);
+      $stmt->execute([$postId]);
+      $comments = $stmt->fetchAll();
+      
+      foreach ($comments as &$comment) {
+          if (!$comment['avatar_url']) {
+             $comment['avatar_url'] = 'https://ui-avatars.com/api/?name=' . urlencode($comment['user_name'] ?? 'User') . '&background=random';
+          }
+      }
+      
+      Response::success("Comments retrieved successfully", ['comments' => $comments]);
+      
+    } catch(Exception $e) {
+      error_log("Get comments error: " . $e->getMessage());
+      Response::error("Failed to retrieve comments: " . $e->getMessage(), 500);
+    }
+  }
+
+  public function addComment($postId) {
+    try {
+      $user = $this->auth->authenticate();
+      $data = json_decode(file_get_contents("php://input"), true);
+      
+      $errors = $this->validateRequiredFields($data, ['content']);
+      if (!empty($errors)) {
+        Response::validationError($errors);
+      }
+      
+      $commentId = $this->insert('community_post_comments', [
+        'post_id' => $postId,
+        'user_id' => $user['uid'],
+        'content' => $data['content']
+      ]);
+      
+      $this->db->query("UPDATE community_posts SET comments_count = comments_count + 1 WHERE id = " . (int)$postId);
+      
+      $stmt = $this->db->prepare("
+        SELECT c.*, u.name as user_name, u.profile_image as avatar_url
+        FROM community_post_comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.id = ?
+      ");
+      $stmt->execute([$commentId]);
+      $newComment = $stmt->fetch();
+      if (!$newComment['avatar_url']) {
+         $newComment['avatar_url'] = 'https://ui-avatars.com/api/?name=' . urlencode($newComment['user_name'] ?? 'User') . '&background=random';
+      }
+      
+      Response::success("Comment added successfully", ['comment' => $newComment], 201);
+      
+    } catch(Exception $e) {
+      error_log("Add comment error: " . $e->getMessage());
+      Response::error("Failed to add comment: " . $e->getMessage(), 500);
+    }
+  }
 }

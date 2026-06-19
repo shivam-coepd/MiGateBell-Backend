@@ -652,6 +652,12 @@ try {
     if (preg_match('/^\/api\/community\/posts\/(\d+)\/like$/', $uri, $matches) && $method === 'POST') {
         (new CommunityController())->likePost($matches[1]);
     }
+    if (preg_match('/^\/api\/community\/posts\/(\d+)\/comments$/', $uri, $matches) && $method === 'GET') {
+        (new CommunityController())->getComments($matches[1]);
+    }
+    if (preg_match('/^\/api\/community\/posts\/(\d+)\/comments$/', $uri, $matches) && $method === 'POST') {
+        (new CommunityController())->addComment($matches[1]);
+    }
 
     // If no route matched, return 404
     Response::notFound("API endpoint not found: " . $uri);
