@@ -34,6 +34,7 @@ require_once __DIR__ . '/../modules/admin/SuperAdminController.php';
 require_once __DIR__ . '/../helpers/s3_helper.php';
 require_once __DIR__ . '/../modules/upload/UploadController.php';
 require_once __DIR__ . '/../modules/guard/GuardController.php';
+require_once __DIR__ . '/../modules/community/CommunityController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -636,6 +637,20 @@ try {
     // POST /api/upload/file  (multipart, server-side upload fallback)
     if ($uri === '/api/upload/file' && $method === 'POST') {
         (new UploadController())->uploadFile();
+    }
+
+    // Community Routes
+    if ($uri === '/api/community/posts' && $method === 'GET') {
+        (new CommunityController())->getPosts();
+    }
+    if ($uri === '/api/community/posts' && $method === 'POST') {
+        (new CommunityController())->createPost();
+    }
+    if (preg_match('/^\/api\/community\/posts\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new CommunityController())->deletePost($matches[1]);
+    }
+    if (preg_match('/^\/api\/community\/posts\/(\d+)\/like$/', $uri, $matches) && $method === 'POST') {
+        (new CommunityController())->likePost($matches[1]);
     }
 
     // If no route matched, return 404

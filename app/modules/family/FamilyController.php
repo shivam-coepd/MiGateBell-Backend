@@ -23,6 +23,7 @@ class FamilyController extends BaseController
             resident_id INT NOT NULL,
             name VARCHAR(100) NOT NULL,
             relation VARCHAR(50),
+            member_type VARCHAR(20) DEFAULT 'Adult',
             phone VARCHAR(15),
             is_active BOOLEAN DEFAULT TRUE,
             image_url VARCHAR(255),
@@ -84,6 +85,7 @@ class FamilyController extends BaseController
                 'resident_id' => $targetResidentId,
                 'name' => $data['name'],
                 'relation' => $data['relation'],
+                'member_type' => $data['member_type'] ?? 'Adult',
                 'phone' => $data['phone'] ?? null,
                 'image_url' => $data['image_url'] ?? null,
                 'is_active' => 1
@@ -164,7 +166,7 @@ class FamilyController extends BaseController
             }
 
             // Prepare update data
-            $allowedFields = ['name', 'relation', 'phone', 'image_url', 'is_active'];
+            $allowedFields = ['name', 'relation', 'member_type', 'phone', 'image_url', 'is_active'];
             $updateData = [];
 
             foreach ($allowedFields as $field) {

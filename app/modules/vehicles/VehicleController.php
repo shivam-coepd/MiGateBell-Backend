@@ -29,17 +29,17 @@ class VehicleController extends BaseController
   }
 
   public function getVehicleTypes()
-    {
-        try {
-            // Ensure the user is authenticated (optional, can be public)
-            $this->auth->authenticate();
+  {
+    try {
+      // Ensure the user is authenticated (optional, can be public)
+      $this->auth->authenticate();
 
-            $stmt = $this->db->query("SELECT * FROM vehicle_types");
-            Response::success("Vehicle types retrieved", $stmt->fetchAll());
-        } catch (Exception $e) {
-            Response::error("Failed to retrieve types: " . $e->getMessage(), 500);
-        }
+      $stmt = $this->db->query("SELECT * FROM vehicle_types");
+      Response::success("Vehicle types retrieved", $stmt->fetchAll());
+    } catch (Exception $e) {
+      Response::error("Failed to retrieve types: " . $e->getMessage(), 500);
     }
+  }
 
   public function addVehicle()
   {
@@ -96,6 +96,7 @@ class VehicleController extends BaseController
         'registration_number' => $data['registration_number'],
         'parking_spot' => $data['parking_spot'] ?? null,
         'is_parked' => isset($data['is_parked']) ? (int) $data['is_parked'] : 0,
+        'image_url' => $data['image_url'] ?? null,
         'society_id' => $user['society_id']
       ]);
 
@@ -239,7 +240,7 @@ class VehicleController extends BaseController
 
       // Prepare update data
       $updateData = [];
-      $allowedFields = ['make', 'model', 'color', 'parking_spot', 'is_electric', 'is_parked'];
+      $allowedFields = ['make', 'model', 'color', 'parking_spot', 'is_electric', 'is_parked', 'image_url'];
 
       foreach ($allowedFields as $field) {
         if (isset($data[$field])) {
