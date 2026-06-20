@@ -35,6 +35,7 @@ require_once __DIR__ . '/../helpers/s3_helper.php';
 require_once __DIR__ . '/../modules/upload/UploadController.php';
 require_once __DIR__ . '/../modules/guard/GuardController.php';
 require_once __DIR__ . '/../modules/community/CommunityController.php';
+require_once __DIR__ . '/../modules/events/EventController.php';
 
 // Get the request URI and method
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -657,6 +658,23 @@ try {
     }
     if (preg_match('/^\/api\/community\/posts\/(\d+)\/comments$/', $uri, $matches) && $method === 'POST') {
         (new CommunityController())->addComment($matches[1]);
+    }
+
+    // Events Routes
+    if ($uri === '/api/events' && $method === 'GET') {
+        (new EventController())->getEvents();
+    }
+    if ($uri === '/api/events' && $method === 'POST') {
+        (new EventController())->createEvent();
+    }
+    if (preg_match('/^\/api\/events\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new EventController())->updateEvent($matches[1]);
+    }
+    if (preg_match('/^\/api\/events\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new EventController())->deleteEvent($matches[1]);
+    }
+    if (preg_match('/^\/api\/events\/(\d+)\/rsvp$/', $uri, $matches) && $method === 'POST') {
+        (new EventController())->rsvpEvent($matches[1]);
     }
 
     // If no route matched, return 404
