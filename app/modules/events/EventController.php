@@ -67,6 +67,7 @@ class EventController extends BaseController {
                 'price' => $data['price'] ?? 'Free',
                 'cover_image' => $data['cover_image'] ?? null,
                 'description' => $data['description'] ?? null,
+                'tags' => $data['tags'] ?? null,
                 'attendees' => 0,
                 'rating' => 0.0
             ]);
@@ -97,7 +98,7 @@ class EventController extends BaseController {
             }
             
             $updateData = [];
-            $allowedFields = ['title', 'category', 'event_date', 'event_time', 'location', 'organizer', 'price', 'cover_image', 'description'];
+            $allowedFields = ['title', 'category', 'event_date', 'event_time', 'location', 'organizer', 'price', 'cover_image', 'description', 'tags'];
             foreach ($allowedFields as $field) {
                 if (isset($data[$field])) {
                     $updateData[$field] = $data[$field];
@@ -105,7 +106,7 @@ class EventController extends BaseController {
             }
             
             if (!empty($updateData)) {
-                $this->update('events', $updateData, 'id = ?', [$eventId]);
+                $this->update('events', $updateData, 'id = :id', ['id' => $eventId]);
             }
             
             Response::success("Event updated successfully");
@@ -154,7 +155,7 @@ class EventController extends BaseController {
             $attendee = $stmt->fetch();
             
             if ($attendee) {
-                $this->update('event_attendees', ['status' => $status], 'id = ?', [$attendee['id']]);
+                $this->update('event_attendees', ['status' => $status], 'id = :id', ['id' => $attendee['id']]);
             } else {
                 $this->insert('event_attendees', [
                     'event_id' => $eventId,
@@ -167,8 +168,7 @@ class EventController extends BaseController {
             $countStmt = $this->db->prepare("SELECT COUNT(*) as cnt FROM event_attendees WHERE event_id = ? AND status = 'going'");
             $countStmt->execute([$eventId]);
             $goingCount = $countStmt->fetch()['cnt'];
-            
-            $this->update('events', ['attendees' => $goingCount], 'id = ?', [$eventId]);
+            $this->update('events', ['attendees' => $goingCount], 'id = :id', ['id' => $eventId]);
             
             Response::success("RSVP updated successfully", ['attendees' => $goingCount]);
             

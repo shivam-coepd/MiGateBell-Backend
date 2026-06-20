@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD COLUMN `tags` VARCHAR(255) NULL DEFAULT NULL AFTER `description`;
