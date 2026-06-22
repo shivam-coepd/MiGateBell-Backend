@@ -524,8 +524,8 @@ class CommunicationsController extends BaseController {
   
   public function createPoll() {
     try {
-      // Only admins can create polls
-      $user = $this->auth->authorize('admin');
+      // Authenticate user (allow residents and admins)
+      $user = $this->auth->authenticate();
       
       $data = json_decode(file_get_contents("php://input"), true);
       
@@ -551,13 +551,17 @@ class CommunicationsController extends BaseController {
         }
       }
       
-      // Validate date formats
-      if (!empty($data['starts_at']) && !preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['starts_at'])) {
-        Response::error("Invalid start date format. Expected YYYY-MM-DD HH:MM:SS");
+      // Parse and format dates
+      if (!empty($data['starts_at'])) {
+        $time = strtotime($data['starts_at']);
+        if (!$time) Response::error("Invalid start date format");
+        $data['starts_at'] = date('Y-m-d H:i:s', $time);
       }
       
-      if (!empty($data['ends_at']) && !preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $data['ends_at'])) {
-        Response::error("Invalid end date format. Expected YYYY-MM-DD HH:MM:SS");
+      if (!empty($data['ends_at'])) {
+        $time = strtotime($data['ends_at']);
+        if (!$time) Response::error("Invalid end date format");
+        $data['ends_at'] = date('Y-m-d H:i:s', $time);
       }
       
       // Validate poll type
@@ -643,7 +647,7 @@ class CommunicationsController extends BaseController {
       
       // Get polls
       $sql = "
-        SELECT p.*, u.name as created_by_name
+        SELECT p.*, u.name as created_by_name, u.profile_image as created_by_profile_image
         FROM polls p
         LEFT JOIN users u ON p.created_by = u.id
         {$whereClause}
@@ -691,7 +695,6 @@ class CommunicationsController extends BaseController {
       Response::error("Failed to retrieve polls: " . $e->getMessage(), 500);
     }
   }
-  
   public function voteOnPoll($pollId) {
     try {
       $user = $this->auth->authenticate();
@@ -756,6 +759,76 @@ class CommunicationsController extends BaseController {
     } catch(Exception $e) {
       error_log("Vote on poll error: " . $e->getMessage());
       Response::error("Failed to record vote: " . $e->getMessage(), 500);
+    }
+  }
+
+  public function updatePoll($pollId) {
+    try {
+      $user = $this->auth->authenticate();
+      $data = json_decode(file_get_contents("php://input"), true);
+      
+      // Check if poll exists
+      $stmt = $this->db->prepare("SELECT id, created_by FROM polls WHERE id = ? AND society_id = ?");
+      $stmt->execute([$pollId, $user['society_id']]);
+      $poll = $stmt->fetch();
+      
+      if (!$poll) {
+        Response::notFound("Poll not found");
+      }
+      
+      // Permission check: admin can update any, resident only their own
+      if ($user['role'] !== 'admin' && $user['role'] !== 'super_admin' && $poll['created_by'] !== $user['uid']) {
+        Response::error("Unauthorized to update this poll", 403);
+      }
+      
+      $updates = [];
+      if (isset($data['question'])) $updates['question'] = $data['question'];
+      if (isset($data['poll_type'])) $updates['poll_type'] = $data['poll_type'];
+      if (isset($data['ends_at'])) $updates['ends_at'] = $data['ends_at'];
+      if (isset($data['is_active'])) $updates['is_active'] = $data['is_active'] ? 1 : 0;
+      
+      if (!empty($updates)) {
+        $this->update('polls', $updates, 'id = ' . (int)$pollId);
+      }
+      
+      Response::success("Poll updated successfully");
+      
+    } catch(Exception $e) {
+      error_log("Update poll error: " . $e->getMessage());
+      Response::error("Failed to update poll: " . $e->getMessage(), 500);
+    }
+  }
+
+  public function deletePoll($pollId) {
+    try {
+      $user = $this->auth->authenticate();
+      
+      // Check if poll exists
+      $stmt = $this->db->prepare("SELECT id, created_by FROM polls WHERE id = ? AND society_id = ?");
+      $stmt->execute([$pollId, $user['society_id']]);
+      $poll = $stmt->fetch();
+      
+      if (!$poll) {
+        Response::notFound("Poll not found");
+      }
+      
+      // Permission check: admin can delete any, resident only their own
+      if ($user['role'] !== 'admin' && $user['role'] !== 'super_admin' && $poll['created_by'] !== $user['uid']) {
+        Response::error("Unauthorized to delete this poll", 403);
+      }
+      
+      // Cascade delete is usually handled by DB, but we can do it explicitly or assume foreign keys handle it.
+      // Poll_options and poll_votes should ideally have ON DELETE CASCADE. 
+      // If not, we should delete them first. Let's be safe.
+      $this->db->prepare("DELETE FROM poll_votes WHERE poll_id = ?")->execute([$pollId]);
+      $this->db->prepare("DELETE FROM poll_options WHERE poll_id = ?")->execute([$pollId]);
+      $this->db->prepare("DELETE FROM polls WHERE id = ?")->execute([$pollId]);
+      
+      Response::success("Poll deleted successfully");
+      
+    } catch(Exception $e) {
+      error_log("Delete poll error: " . $e->getMessage());
+      Response::error("Failed to delete poll: " . $e->getMessage(), 500);
     }
   }
 }

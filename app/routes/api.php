@@ -251,6 +251,14 @@ try {
         (new CommunicationsController)->voteOnPoll($matches[1]);
     }
 
+    if (preg_match('/^\/api\/communications\/polls\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new CommunicationsController)->updatePoll($matches[1]);
+    }
+
+    if (preg_match('/^\/api\/communications\/polls\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new CommunicationsController)->deletePoll($matches[1]);
+    }
+
     // Amenities routes
     if ($uri === '/api/amenities' && $method === 'POST') {
         (new AmenitiesController)->createAmenity();
