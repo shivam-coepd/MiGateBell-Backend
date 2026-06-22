@@ -26,6 +26,12 @@ class EventController extends BaseController {
                 $attendance = $attStmt->fetch();
                 $event['my_status'] = $attendance ? $attendance['status'] : null;
                 
+                // Fetch recent attendees for avatar bubbles
+                $attListStmt = $this->db->prepare("SELECT u.profile_image FROM event_attendees ea JOIN users u ON ea.user_id = u.id WHERE ea.event_id = ? AND ea.status = 'going' LIMIT 8");
+                $attListStmt->execute([$event['id']]);
+                $recentAttendees = $attListStmt->fetchAll();
+                $event['recent_attendees'] = array_column($recentAttendees, 'profile_image');
+                
                 // Set default organizer name if null
                 if (empty($event['organizer'])) {
                     $event['organizer'] = $event['organizer_name'] ?? 'Society Admin';
@@ -169,8 +175,16 @@ class EventController extends BaseController {
             $countStmt->execute([$eventId]);
             $goingCount = $countStmt->fetch()['cnt'];
             $this->update('events', ['attendees' => $goingCount], 'id = :id', ['id' => $eventId]);
+            // Fetch recent attendees
+            $attListStmt = $this->db->prepare("SELECT u.profile_image FROM event_attendees ea JOIN users u ON ea.user_id = u.id WHERE ea.event_id = ? AND ea.status = 'going' LIMIT 8");
+            $attListStmt->execute([$eventId]);
+            $recentAttendees = $attListStmt->fetchAll();
+            $recentAttendeesList = array_column($recentAttendees, 'profile_image');
             
-            Response::success("RSVP updated successfully", ['attendees' => $goingCount]);
+            Response::success("RSVP updated successfully", [
+                'attendees' => $goingCount,
+                'recent_attendees' => $recentAttendeesList
+            ]);
             
         } catch(Exception $e) {
             error_log("RSVP event error: " . $e->getMessage());
