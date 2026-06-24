@@ -278,7 +278,7 @@ class AccountingController extends BaseController {
         SELECT invoice_number 
         FROM invoices 
         WHERE society_id = ? 
-        ORDER BY created_at DESC 
+        ORDER BY id DESC 
         LIMIT 1
       ");
       $stmt->execute([$societyId]);
@@ -561,7 +561,7 @@ class AccountingController extends BaseController {
         SELECT receipt_number 
         FROM receipts 
         WHERE society_id = ? 
-        ORDER BY created_at DESC 
+        ORDER BY id DESC 
         LIMIT 1
       ");
       $stmt->execute([$societyId]);
