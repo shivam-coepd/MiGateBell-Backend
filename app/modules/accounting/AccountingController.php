@@ -447,10 +447,9 @@ class AccountingController extends BaseController {
       
       // Check if invoice exists and belongs to the same society
       $stmt = $this->db->prepare("
-        SELECT i.*, f.flat_number, u.id as resident_id
+        SELECT i.*, f.flat_number, f.owner_id, f.tenant_id
         FROM invoices i
         LEFT JOIN flats f ON i.flat_id = f.id
-        LEFT JOIN users u ON f.owner_id = u.id
         WHERE i.id = ? AND i.society_id = ?
       ");
       $stmt->execute([$data['invoice_id'], $user['society_id']]);
@@ -461,7 +460,10 @@ class AccountingController extends BaseController {
       }
       
       // Check permissions
-      if ($user['role'] === 'resident' && $invoice['resident_id'] != $user['uid']) {
+      if ($user['role'] === 'resident' && 
+          $invoice['resident_id'] != $user['uid'] && 
+          $invoice['owner_id'] != $user['uid'] && 
+          $invoice['tenant_id'] != $user['uid']) {
         Response::forbidden("You can only make payments for your own invoices");
       }
       
@@ -477,15 +479,18 @@ class AccountingController extends BaseController {
       $paymentId = $this->insert('payments', [
         'payment_reference' => $paymentReference,
         'invoice_id' => $data['invoice_id'],
-        'resident_id' => $invoice['resident_id'],
+        'resident_id' => $invoice['resident_id'] ?? $user['uid'],
         'society_id' => $user['society_id'],
         'payment_method' => $data['payment_method'],
         'payment_gateway' => $data['payment_gateway'] ?? null,
         'amount' => $data['amount'],
         'transaction_id' => $data['transaction_id'] ?? null,
-        'transaction_status' => 'pending',
+        'transaction_status' => 'success',
         'notes' => $data['notes'] ?? null
       ]);
+      
+      // Update invoice status to paid
+      $this->update('invoices', ['status' => 'paid'], 'id = :id', ['id' => $data['invoice_id']]);
       
       // Create receipt
       $receiptNumber = $this->generateReceiptNumber($user['society_id']);
@@ -494,7 +499,7 @@ class AccountingController extends BaseController {
         'receipt_number' => $receiptNumber,
         'payment_id' => $paymentId,
         'invoice_id' => $data['invoice_id'],
-        'resident_id' => $invoice['resident_id'],
+        'resident_id' => $invoice['resident_id'] ?? $user['uid'],
         'society_id' => $user['society_id'],
         'amount' => $data['amount'],
         'receipt_date' => date('Y-m-d')
