@@ -339,7 +339,9 @@ class AccountingController extends BaseController {
       
       // Get invoices
       $sql = "
-        SELECT i.*, f.flat_number, u.name as resident_name
+        SELECT i.*, f.flat_number, u.name as resident_name,
+               (SELECT payment_method FROM payments WHERE invoice_id = i.id AND transaction_status = 'success' ORDER BY created_at DESC LIMIT 1) as payment_method,
+               (SELECT created_at FROM payments WHERE invoice_id = i.id AND transaction_status = 'success' ORDER BY created_at DESC LIMIT 1) as paid_date
         FROM invoices i
         {$joinClause}
         LEFT JOIN users u ON i.resident_id = u.id
@@ -385,7 +387,9 @@ class AccountingController extends BaseController {
       
       // Get invoice
       $sql = "
-        SELECT i.*, f.flat_number, u.name as resident_name, cb.name as created_by_name
+        SELECT i.*, f.flat_number, u.name as resident_name, cb.name as created_by_name,
+               (SELECT payment_method FROM payments WHERE invoice_id = i.id AND transaction_status = 'success' ORDER BY created_at DESC LIMIT 1) as payment_method,
+               (SELECT created_at FROM payments WHERE invoice_id = i.id AND transaction_status = 'success' ORDER BY created_at DESC LIMIT 1) as paid_date
         FROM invoices i
         {$joinClause}
         LEFT JOIN users u ON i.resident_id = u.id
