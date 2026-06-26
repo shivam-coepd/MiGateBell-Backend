@@ -846,11 +846,16 @@ class AdminController extends BaseController
         Response::notFound("Building not found");
       }
 
-      // Get flats for building that are not occupied
+      // If user is not authenticated, only show vacant flats
+      $whereClause = "WHERE building_id = ?";
+      if (!$user) {
+        $whereClause .= " AND (is_occupied = 0 OR is_occupied IS NULL)";
+      }
+
       $stmt = $this->db->prepare("
-        SELECT id, flat_number, flat_type, floor_number, area_sqft
+        SELECT id, flat_number, flat_type, floor_number, area_sqft, is_occupied, owner_id, tenant_id
         FROM flats 
-        WHERE building_id = ? AND (is_occupied = 0 OR is_occupied IS NULL)
+        $whereClause
         ORDER BY floor_number, flat_number
       ");
       $stmt->execute([$buildingId]);
