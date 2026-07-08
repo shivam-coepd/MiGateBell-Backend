@@ -26,6 +26,36 @@ class Model {
   // Generic method to execute INSERT queries
   protected function insert($table, $data) {
     try {
+      // Try to inject device time from the request header
+      $deviceTime = null;
+      if (function_exists('apache_request_headers')) {
+          $headers = apache_request_headers();
+          foreach ($headers as $key => $value) {
+              if (strtolower($key) === 'x-device-time') {
+                  $deviceTime = $value;
+                  break;
+              }
+          }
+      }
+      if (!$deviceTime && isset($_SERVER['HTTP_X_DEVICE_TIME'])) {
+          $deviceTime = $_SERVER['HTTP_X_DEVICE_TIME'];
+      }
+
+      if ($deviceTime) {
+          // Check if table has created_at and updated_at
+          $stmt = $this->db->prepare("SHOW COLUMNS FROM {$table} LIKE 'created_at'");
+          $stmt->execute();
+          if ($stmt->fetch() && !isset($data['created_at'])) {
+              $data['created_at'] = $deviceTime;
+          }
+          
+          $stmt = $this->db->prepare("SHOW COLUMNS FROM {$table} LIKE 'updated_at'");
+          $stmt->execute();
+          if ($stmt->fetch() && !isset($data['updated_at'])) {
+              $data['updated_at'] = $deviceTime;
+          }
+      }
+
       $columns = implode(',', array_keys($data));
       $placeholders = ':' . implode(', :', array_keys($data));
       $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
@@ -43,6 +73,29 @@ class Model {
   // Generic method to execute UPDATE queries
   protected function update($table, $data, $where, $whereParams = []) {
     try {
+      // Try to inject device time from the request header
+      $deviceTime = null;
+      if (function_exists('apache_request_headers')) {
+          $headers = apache_request_headers();
+          foreach ($headers as $key => $value) {
+              if (strtolower($key) === 'x-device-time') {
+                  $deviceTime = $value;
+                  break;
+              }
+          }
+      }
+      if (!$deviceTime && isset($_SERVER['HTTP_X_DEVICE_TIME'])) {
+          $deviceTime = $_SERVER['HTTP_X_DEVICE_TIME'];
+      }
+
+      if ($deviceTime) {
+          $stmt = $this->db->prepare("SHOW COLUMNS FROM {$table} LIKE 'updated_at'");
+          $stmt->execute();
+          if ($stmt->fetch() && !isset($data['updated_at'])) {
+              $data['updated_at'] = $deviceTime;
+          }
+      }
+
       $setParts = [];
       foreach(array_keys($data) as $column) {
         $setParts[] = "{$column} = :{$column}";

@@ -207,7 +207,7 @@ class AccountingController extends BaseController {
         'total_discount' => $data['total_discount'] ?? 0,
         'arrears_amount' => $data['arrears_amount'] ?? 0,
         'fine_amount' => $data['fine_amount'] ?? 0,
-        'status' => 'draft',
+        'status' => 'pending',
         'notes' => $data['notes'] ?? null,
         'created_by' => $user['uid']
       ]);
@@ -597,7 +597,7 @@ class AccountingController extends BaseController {
       }
       
       // Validate status against allowed ENUM values
-      $allowedStatuses = ['draft', 'sent', 'partially_paid', 'paid', 'overdue', 'cancelled'];
+      $allowedStatuses = ['draft', 'sent', 'pending', 'paid', 'overdue', 'cancelled'];
       if (!in_array($data['status'], $allowedStatuses)) {
         Response::error("Invalid status. Allowed values: " . implode(', ', $allowedStatuses));
       }
