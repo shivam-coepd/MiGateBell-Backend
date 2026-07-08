@@ -243,6 +243,57 @@ class VisitorsController extends BaseController {
       Response::error("Failed to retrieve visitor: " . $e->getMessage(), 500);
     }
   }
+  public function updateVisitor($id) {
+    try {
+      $user = $this->auth->authorizeAny(['admin', 'resident', 'guard']);
+      
+      $data = json_decode(file_get_contents("php://input"), true);
+      
+      // Verify visitor belongs to society/resident
+      $stmt = $this->db->prepare("SELECT * FROM visitors WHERE id = ?");
+      $stmt->execute([$id]);
+      $visitor = $stmt->fetch();
+      
+      if (!$visitor) {
+        Response::error("Visitor not found", 404);
+      }
+      
+      if ($user['role'] === 'resident' && $visitor['resident_id'] != $user['uid']) {
+         Response::error("Not authorized to update this visitor", 403);
+      }
+      
+      $updateData = [];
+      $allowedFields = ['name', 'phone', 'purpose', 'visit_date', 'visit_time', 'expected_exit_time', 'visitor_type'];
+      
+      foreach ($allowedFields as $field) {
+          if (isset($data[$field])) {
+              $updateData[$field] = $data[$field];
+          }
+      }
+      
+      if (empty($updateData)) {
+          Response::error("No valid fields to update", 400);
+      }
+      
+      $updated = $this->update('visitors', $updateData, 'id = :id', ['id' => $id]);
+      
+      if ($updated === 0) {
+          // If no rows were affected, it's possible the data was the same or it failed
+          // We don't error out, just return success
+      }
+      
+      // Fetch updated visitor
+      $stmt = $this->db->prepare("SELECT * FROM visitors WHERE id = ?");
+      $stmt->execute([$id]);
+      $updatedVisitor = $stmt->fetch();
+      
+      Response::success("Visitor updated successfully", ['visitor' => $updatedVisitor]);
+      
+    } catch(Exception $e) {
+      error_log("Update visitor error: " . $e->getMessage());
+      Response::error("Failed to update visitor: " . $e->getMessage(), 500);
+    }
+  }
   
   public function updateVisitorStatus($id) {
     try {

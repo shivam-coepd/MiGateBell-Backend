@@ -603,6 +603,10 @@ try {
     if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'GET') {
         (new VisitorsController())->getVisitorById($matches[1]);
     }
+    if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new VisitorsController())->updateVisitor($matches[1]);
+        exit;
+    }
     if (preg_match('/^\/api\/visitors\/(\d+)\/status$/', $uri, $matches) && $method === 'PUT') {
         (new VisitorsController())->updateVisitorStatus($matches[1]);
     }
