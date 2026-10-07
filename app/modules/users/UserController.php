@@ -184,49 +184,6 @@ class UserController extends BaseController
         return $data;
     }
 
-    // public function updateProfile()
-    // {
-    //     try {
-    //         $user = $this->auth->authenticate();
-    //         $userId = $user['uid'];
-
-    //         $data = json_decode(file_get_contents("php://input"), true);
-
-    //         // Allowed fields to update
-    //         $allowedFields = ['name', 'email', 'profile_image'];
-    //         $updateData = [];
-
-    //         foreach ($allowedFields as $field) {
-    //             if (isset($data[$field])) {
-    //                 $updateData[$field] = $data[$field];
-    //             }
-    //         }
-
-    //         if (empty($updateData)) {
-    //             Response::error("No valid fields to update");
-    //         }
-
-    //         // Validate email if present
-    //         if (isset($updateData['email']) && !filter_var($updateData['email'], FILTER_VALIDATE_EMAIL)) {
-    //             Response::error("Invalid email format");
-    //         }
-
-    //         // Update user
-    //         $updated = $this->update('users', $updateData, 'id = :id', ['id' => $userId]);
-
-    //         if ($updated === 0) {
-    //             // It might be 0 if data is same
-    //             // Response::success("Profile is already up to date");
-    //         }
-
-    //         Response::success("Profile updated successfully");
-
-    //     } catch (Exception $e) {
-    //         error_log("Update profile error: " . $e->getMessage());
-    //         Response::error("Failed to update profile: " . $e->getMessage(), 500);
-    //     }
-    // }
-
     public function updateProfile()
     {
         try {
@@ -323,6 +280,87 @@ class UserController extends BaseController
         } catch (Exception $e) {
             error_log("Update profile error: " . $e->getMessage());
             Response::error("Failed to update profile: " . $e->getMessage(), 500);
+        }
+    }
+
+    public function downloadData()
+    {
+        try {
+            $user = $this->auth->authenticate();
+            $userId = $user['uid'];
+            
+            $data = [];
+
+            // 1. User Profile Data
+            $stmt = $this->db->prepare("SELECT id, app_user_id, name, email, phone, role, society_id, profile_image, cover_image_url, resident_type, bio, profession, hometown, status, created_at FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $data['profile'] = $stmt->fetch();
+
+            // 2. Family Members
+            $stmt = $this->db->prepare("SELECT id, name, relation, phone, image_url, is_active, created_at FROM family_members WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['family_members'] = $stmt->fetchAll();
+
+            // 3. Flats
+            $stmt = $this->db->prepare("SELECT id, society_id, building_id, flat_number, floor_number, area_sqft, is_occupied, created_at FROM flats WHERE owner_id = ? OR tenant_id = ?");
+            $stmt->execute([$userId, $userId]);
+            $data['flats'] = $stmt->fetchAll();
+
+            // 4. Vehicles
+            $stmt = $this->db->prepare("SELECT id, vehicle_type_id, registration_number, make, model, color, is_parked, created_at FROM vehicles WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['vehicles'] = $stmt->fetchAll();
+
+            // 5. Pets
+            $stmt = $this->db->prepare("SELECT id, pet_type_id, name, breed, age, weight, vaccination_status, notes, is_active, created_at FROM pets WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['pets'] = $stmt->fetchAll();
+
+            // 6. Visitors
+            $stmt = $this->db->prepare("SELECT id, name, phone, purpose, visit_date, visit_time, status, created_at FROM visitors WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['visitors'] = $stmt->fetchAll();
+
+            // 7. Helpdesk Tickets
+            $stmt = $this->db->prepare("SELECT id, title, description, category, priority, status, created_at FROM tickets WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['helpdesk_tickets'] = $stmt->fetchAll();
+
+            // 8. Amenity Bookings
+            $stmt = $this->db->prepare("SELECT id, amenity_id, booking_date, start_time, end_time, status, total_amount, created_at FROM amenity_bookings WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['amenity_bookings'] = $stmt->fetchAll();
+
+            // 9. Service Bookings
+            $stmt = $this->db->prepare("SELECT id, service_id, booking_date, booking_time, notes, status, created_at FROM service_bookings WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['service_bookings'] = $stmt->fetchAll();
+
+            // 10. Orders
+            $stmt = $this->db->prepare("SELECT id, total_amount, status, created_at FROM orders WHERE buyer_id = ?");
+            $stmt->execute([$userId]);
+            $data['marketplace_orders'] = $stmt->fetchAll();
+
+            // 11. Notifications
+            $stmt = $this->db->prepare("SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            $data['notifications'] = $stmt->fetchAll();
+
+            // 12. Payments
+            $stmt = $this->db->prepare("SELECT id, invoice_id, amount, payment_method, transaction_id, transaction_status as status, payment_date FROM payments WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['payments'] = $stmt->fetchAll();
+
+            // 13. Invoices
+            $stmt = $this->db->prepare("SELECT id, flat_id, invoice_number, total_amount, due_date, status, created_at FROM invoices WHERE resident_id = ?");
+            $stmt->execute([$userId]);
+            $data['invoices'] = $stmt->fetchAll();
+
+            Response::success("Data downloaded successfully", $data);
+
+        } catch (Exception $e) {
+            error_log("Download data error: " . $e->getMessage());
+            Response::error("Failed to download data: " . $e->getMessage(), 500);
         }
     }
 

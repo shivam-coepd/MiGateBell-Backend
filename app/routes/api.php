@@ -399,6 +399,10 @@ try {
         (new UserController)->updateProfile();
     }
 
+    if ($uri === '/api/users/download-data' && $method === 'GET') {
+        (new UserController)->downloadData();
+    }
+
     // Marketplace Routes
     if ($uri === '/api/marketplace/categories' && $method === 'GET') {
         (new MarketplaceController)->getCategories();
