@@ -12,12 +12,22 @@ class NotificationHelper {
   }
   
   private function getFcmAccessToken() {
-    // Requires a service account JSON file from Firebase Console
     $credentialsPath = __DIR__ . '/../config/firebase_credentials.json';
+    $cachePath = __DIR__ . '/../config/fcm_token_cache.json';
     
     if (!file_exists($credentialsPath)) {
       error_log("FCM error: Firebase credentials file not found at $credentialsPath");
       return null;
+    }
+
+    // Check cache first
+    if (file_exists($cachePath)) {
+        $cache = json_decode(file_get_contents($cachePath), true);
+        if ($cache && isset($cache['token']) && isset($cache['expires_at'])) {
+            if (time() < $cache['expires_at'] - 60) {
+                return $cache['token'];
+            }
+        }
     }
 
     try {
@@ -27,7 +37,17 @@ class NotificationHelper {
       );
       
       $token = $client->fetchAuthToken();
-      return $token['access_token'] ?? null;
+      $accessToken = $token['access_token'] ?? null;
+      
+      if ($accessToken) {
+          $expiresAt = time() + ($token['expires_in'] ?? 3600);
+          file_put_contents($cachePath, json_encode([
+              'token' => $accessToken,
+              'expires_at' => $expiresAt
+          ]));
+      }
+      
+      return $accessToken;
     } catch (\Exception $e) {
       error_log("FCM get auth token error: " . $e->getMessage());
       return null;

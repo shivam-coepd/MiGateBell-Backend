@@ -79,8 +79,25 @@ class VisitorsController extends BaseController {
       }
       
       // If user is guard, they need resident_id
-      if ($user['role'] === 'guard' && !isset($data['resident_id'])) {
-        Response::error("Resident ID is required when adding visitor as guard");
+      if ($user['role'] === 'guard') {
+        if (!isset($data['resident_id'])) {
+          Response::error("Resident ID or Flat Number is required when adding visitor as guard");
+        }
+        
+        $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND society_id = ? AND role = 'resident'");
+        $stmt->execute([$data['resident_id'], $societyId]);
+        if (!$stmt->fetch()) {
+            $stmt = $this->db->prepare("SELECT u.id FROM users u JOIN flats f ON u.flat_id = f.id WHERE f.flat_number = ? AND u.society_id = ? AND u.role = 'resident' LIMIT 1");
+            $stmt->execute([$data['resident_id'], $societyId]);
+            $resident = $stmt->fetch();
+            if ($resident) {
+                $residentId = $resident['id'];
+            } else {
+                Response::error("Invalid Resident ID or Flat Number");
+            }
+        } else {
+            $residentId = $data['resident_id'];
+        }
       }
       
       // Insert visitor

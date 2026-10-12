@@ -26,13 +26,17 @@ class GuardController extends BaseController
             $params = ['society_id' => $user['society_id']];
 
             if ($search) {
-                $whereClause .= " AND (u.name LIKE :search OR u.phone LIKE :search)";
-                $params['search'] = "%{$search}%";
+                $whereClause .= " AND (u.name LIKE :search_name OR u.phone LIKE :search_phone)";
+                $params['search_name'] = "%{$search}%";
+                $params['search_phone'] = "%{$search}%";
             }
 
             $countSql = "SELECT COUNT(*) as count FROM users u {$whereClause}";
             $countStmt = $this->db->prepare($countSql);
-            $countStmt->execute($params);
+            foreach ($params as $key => $value) {
+                $countStmt->bindValue(":{$key}", $value);
+            }
+            $countStmt->execute();
             $total = $countStmt->fetch()['count'];
 
             $sql = "
@@ -90,7 +94,10 @@ class GuardController extends BaseController
 
             $countSql = "SELECT COUNT(*) as count FROM guard_vehicle_entries ve {$whereClause}";
             $countStmt = $this->db->prepare($countSql);
-            $countStmt->execute($params);
+            foreach ($params as $key => $value) {
+                $countStmt->bindValue(":{$key}", $value);
+            }
+            $countStmt->execute();
             $total = $countStmt->fetch()['count'];
 
             $sql = "
@@ -140,6 +147,27 @@ class GuardController extends BaseController
             $data['driver_phone'] = preg_replace('/\D/', '', (string) $data['driver_phone']);
             if (!preg_match('/^[0-9]{10,15}$/', $data['driver_phone'])) {
                 Response::error("Driver phone must be 10-15 digits");
+            }
+
+            // If resident_id is not found but could be a flat number
+            if (isset($data['resident_id']) && $data['resident_id']) {
+                $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND society_id = ? AND role = 'resident'");
+                $stmt->execute([$data['resident_id'], $user['society_id']]);
+                if (!$stmt->fetch()) {
+                    // Try to resolve by flat number
+                    $stmtFlat = $this->db->prepare("
+                        SELECT u.id
+                        FROM users u
+                        JOIN flats f ON (f.owner_id = u.id OR f.tenant_id = u.id)
+                        WHERE f.flat_number = ? AND f.society_id = ? AND u.role = 'resident'
+                        LIMIT 1
+                    ");
+                    $stmtFlat->execute([$data['resident_id'], $user['society_id']]);
+                    $resident = $stmtFlat->fetch();
+                    if ($resident) {
+                        $data['resident_id'] = $resident['id'];
+                    }
+                }
             }
 
             $entryId = $this->insert('guard_vehicle_entries', [
@@ -278,7 +306,10 @@ class GuardController extends BaseController
 
             $countSql = "SELECT COUNT(*) as count FROM users u {$whereClause}";
             $countStmt = $this->db->prepare($countSql);
-            $countStmt->execute($params);
+            foreach ($params as $key => $value) {
+                $countStmt->bindValue(":{$key}", $value);
+            }
+            $countStmt->execute();
             $total = $countStmt->fetch()['count'];
 
             $sql = "
@@ -362,7 +393,10 @@ class GuardController extends BaseController
                 {$whereClause}
             ";
             $countStmt = $this->db->prepare($countSql);
-            $countStmt->execute($params);
+            foreach ($params as $key => $value) {
+                $countStmt->bindValue(":{$key}", $value);
+            }
+            $countStmt->execute();
             $total = $countStmt->fetch()['count'];
 
             $sql = "
@@ -394,7 +428,10 @@ class GuardController extends BaseController
                 JOIN users u ON ga.guard_id = u.id
                 {$whereClause}
             ");
-            $summaryStmt->execute($params);
+            foreach ($params as $key => $value) {
+                $summaryStmt->bindValue(":{$key}", $value);
+            }
+            $summaryStmt->execute();
             $summary = $summaryStmt->fetch();
 
             $this->sendPaginatedResponse($records, $total, $pagination, "Attendance retrieved successfully", [

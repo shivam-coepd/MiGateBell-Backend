@@ -196,6 +196,7 @@ class UserController extends BaseController
             $allowedFields = [
                 'name',
                 'email',
+                'phone',
                 'profile_image',
                 'cover_image_url',
                 'resident_type',
