@@ -239,6 +239,10 @@ try {
         (new CommunicationsController)->getAnnouncements();
     }
 
+    if (preg_match('/^\/api\/communications\/announcements\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new CommunicationsController)->deleteAnnouncement($matches[1]);
+    }
+
     if ($uri === '/api/communications/polls' && $method === 'POST') {
         (new CommunicationsController)->createPoll();
     }

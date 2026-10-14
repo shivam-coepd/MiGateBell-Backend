@@ -404,8 +404,18 @@ class CommunicationsController extends BaseController {
             }
         }
 
+        // Check if category column exists, add it if not
+        try {
+            $colCheck = $this->db->query("SHOW COLUMNS FROM announcements LIKE 'category'")->fetch();
+            if (!$colCheck) {
+                $this->db->exec("ALTER TABLE announcements ADD COLUMN category VARCHAR(50) DEFAULT 'General' AFTER content");
+            }
+        } catch (\Exception $ignored) {}
+
+        $category = !empty($data['category']) ? trim($data['category']) : 'General';
+
         // Insert announcement
-        $announcementId = $this->insert('announcements', [
+        $insertData = [
             'title' => $data['title'],
             'content' => $data['content'],
             'society_id' => $user['society_id'],
@@ -414,7 +424,16 @@ class CommunicationsController extends BaseController {
             'send_via' => $data['send_via'] ?? 'app',
             'scheduled_at' => $data['scheduled_at'] ?? null,
             'is_draft' => $data['is_draft'] ?? 1
-        ]);
+        ];
+
+        try {
+            $colCheck = $this->db->query("SHOW COLUMNS FROM announcements LIKE 'category'")->fetch();
+            if ($colCheck) {
+                $insertData['category'] = $category;
+            }
+        } catch (\Exception $ignored) {}
+
+        $announcementId = $this->insert('announcements', $insertData);
 
         if (($data['is_draft'] ?? 1) == 0) {
             $notificationHelper = new NotificationHelper();
@@ -467,6 +486,7 @@ class CommunicationsController extends BaseController {
       $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
       $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
       $isDraft = isset($_GET['is_draft']) ? (int)$_GET['is_draft'] : null;
+      $category = isset($_GET['category']) && $_GET['category'] !== 'All' ? trim($_GET['category']) : null;
       
       $pagination = $this->paginate($page, $limit);
       
@@ -478,6 +498,17 @@ class CommunicationsController extends BaseController {
       if ($isDraft !== null) {
         $whereClause .= " AND a.is_draft = :is_draft";
         $params['is_draft'] = $isDraft;
+      }
+
+      // Filter category if column exists
+      if ($category !== null) {
+        try {
+          $colCheck = $this->db->query("SHOW COLUMNS FROM announcements LIKE 'category'")->fetch();
+          if ($colCheck) {
+            $whereClause .= " AND LOWER(a.category) = LOWER(:category)";
+            $params['category'] = $category;
+          }
+        } catch (\Exception $ignored) {}
       }
       
       // Residents can only see announcements for their groups or general announcements
@@ -519,6 +550,26 @@ class CommunicationsController extends BaseController {
     } catch(Exception $e) {
       error_log("Get announcements error: " . $e->getMessage());
       Response::error("Failed to retrieve announcements: " . $e->getMessage(), 500);
+    }
+  }
+
+  public function deleteAnnouncement($id) {
+    try {
+      $user = $this->auth->authorize('admin');
+      
+      $stmt = $this->db->prepare("SELECT id FROM announcements WHERE id = ? AND society_id = ?");
+      $stmt->execute([$id, $user['society_id']]);
+      if (!$stmt->fetch()) {
+        Response::notFound("Announcement not found");
+      }
+      
+      $delStmt = $this->db->prepare("DELETE FROM announcements WHERE id = ? AND society_id = ?");
+      $delStmt->execute([$id, $user['society_id']]);
+      
+      Response::success("Announcement deleted successfully");
+    } catch(Exception $e) {
+      error_log("Delete announcement error: " . $e->getMessage());
+      Response::error("Failed to delete announcement: " . $e->getMessage(), 500);
     }
   }
   
