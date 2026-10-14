@@ -34,6 +34,7 @@ require_once __DIR__ . '/../modules/admin/SuperAdminController.php';
 require_once __DIR__ . '/../helpers/s3_helper.php';
 require_once __DIR__ . '/../modules/upload/UploadController.php';
 require_once __DIR__ . '/../modules/guard/GuardController.php';
+require_once __DIR__ . '/../modules/visitors/DailyHelperController.php';
 require_once __DIR__ . '/../modules/community/CommunityController.php';
 require_once __DIR__ . '/../modules/events/EventController.php';
 
@@ -626,6 +627,35 @@ try {
     }
     if (preg_match('/^\/api\/visitors\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
         (new VisitorsController())->deleteVisitor($matches[1]);
+    }
+
+    // Daily Helper & Static QR routes
+    if ($uri === '/api/daily-helpers' && $method === 'POST') {
+        (new DailyHelperController())->createHelper();
+    }
+    if ($uri === '/api/daily-helpers' && $method === 'GET') {
+        (new DailyHelperController())->getHelpers();
+    }
+    if ($uri === '/api/daily-helpers/scan' && $method === 'POST') {
+        (new DailyHelperController())->processScan();
+    }
+    if ($uri === '/api/daily-helpers/active-inside' && $method === 'GET') {
+        (new DailyHelperController())->getActiveInside();
+    }
+    if ($uri === '/api/daily-helpers/logs' && $method === 'GET') {
+        (new DailyHelperController())->getLogs();
+    }
+    if (preg_match('/^\/api\/daily-helpers\/manual-exit\/(\d+)$/', $uri, $matches) && $method === 'POST') {
+        (new DailyHelperController())->manualExit($matches[1]);
+    }
+    if (preg_match('/^\/api\/daily-helpers\/(\d+)$/', $uri, $matches) && $method === 'GET') {
+        (new DailyHelperController())->getHelperById($matches[1]);
+    }
+    if (preg_match('/^\/api\/daily-helpers\/(\d+)$/', $uri, $matches) && $method === 'PUT') {
+        (new DailyHelperController())->updateHelper($matches[1]);
+    }
+    if (preg_match('/^\/api\/daily-helpers\/(\d+)$/', $uri, $matches) && $method === 'DELETE') {
+        (new DailyHelperController())->deleteHelper($matches[1]);
     }
 
     // Admin Guard management routes
