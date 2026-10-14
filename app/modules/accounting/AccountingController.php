@@ -125,72 +125,160 @@ class AccountingController extends BaseController {
       
       $data = json_decode(file_get_contents("php://input"), true);
       
-      // Validation
-      $errors = $this->validateRequiredFields($data, ['flat_id', 'invoice_date']);
-      if (!empty($errors)) {
-        Response::validationError($errors);
-      }
-      
+      $targetType = $data['target_type'] ?? 'flat'; // 'flat' or 'building'
+      $invoiceDate = $data['invoice_date'] ?? date('Y-m-d');
+      $dueDate = !empty($data['due_date']) ? $data['due_date'] : null;
+
       if (empty($data['items']) || !is_array($data['items'])) {
         Response::error("Invoice items are required");
       }
       
       // Validate date formats
-      if (!empty($data['invoice_date']) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['invoice_date'])) {
+      if (!empty($invoiceDate) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $invoiceDate)) {
         Response::error("Invalid invoice date format. Expected YYYY-MM-DD");
       }
       
-      if (!empty($data['due_date']) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['due_date'])) {
+      if (!empty($dueDate) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
         Response::error("Invalid due date format. Expected YYYY-MM-DD");
       }
-      
-      // Check if flat exists and belongs to the same society
-      $stmt = $this->db->prepare("SELECT id FROM flats WHERE id = ? AND society_id = ?");
-      $stmt->execute([$data['flat_id'], $user['society_id']]);
-      if (!$stmt->fetch()) {
-        Response::notFound("Flat not found in your society");
-      }
-      
-      // Check if resident exists and belongs to the same society when provided
-      if (!empty($data['resident_id'])) {
-        $stmt = $this->db->prepare("SELECT id FROM users WHERE id = ? AND society_id = ?");
-        $stmt->execute([$data['resident_id'], $user['society_id']]);
-        if (!$stmt->fetch()) {
-          Response::notFound("Resident not found in your society");
-        }
-      }
-      
-      // Calculate totals
+
+      // Pre-validate items
       $totalAmount = 0;
       $totalGst = 0;
-      
       foreach ($data['items'] as $item) {
         $itemErrors = $this->validateRequiredFields($item, ['charge_head_id', 'unit_price']);
         if (!empty($itemErrors)) {
           Response::validationError($itemErrors);
         }
-        
-        // Validate numeric fields in item
         if (!is_numeric($item['unit_price']) || $item['unit_price'] < 0) {
           Response::error("Unit price must be a non-negative number");
         }
-        
         if (isset($item['quantity']) && (!is_numeric($item['quantity']) || $item['quantity'] < 0)) {
           Response::error("Quantity must be a non-negative number");
         }
-        
         if (isset($item['gst_rate']) && (!is_numeric($item['gst_rate']) || $item['gst_rate'] < 0 || $item['gst_rate'] > 100)) {
           Response::error("GST rate must be a number between 0 and 100");
         }
-        
         $quantity = $item['quantity'] ?? 1;
         $itemTotal = $quantity * $item['unit_price'];
         $itemGst = $itemTotal * ($item['gst_rate'] ?? 0) / 100;
-        
         $totalAmount += $itemTotal;
         $totalGst += $itemGst;
       }
-      
+
+      $notificationHelper = new NotificationHelper();
+
+      // ========================================================
+      // CASE 1: BULK CREATION FOR ALL FLATS IN A SPECIFIC BUILDING
+      // ========================================================
+      if ($targetType === 'building') {
+        if (empty($data['building_id'])) {
+          Response::error("building_id is required for building-wide invoice creation", 400);
+        }
+
+        // Validate building exists
+        $bStmt = $this->db->prepare("SELECT id, name FROM buildings WHERE id = ? AND society_id = ?");
+        $bStmt->execute([$data['building_id'], $user['society_id']]);
+        $building = $bStmt->fetch();
+        if (!$building) {
+          Response::notFound("Building not found in your society");
+        }
+
+        // Get all flats for this building
+        $flatsStmt = $this->db->prepare("SELECT id, flat_number, owner_id, tenant_id FROM flats WHERE building_id = ? AND society_id = ?");
+        $flatsStmt->execute([$data['building_id'], $user['society_id']]);
+        $flatsList = $flatsStmt->fetchAll();
+
+        if (empty($flatsList)) {
+          Response::error("No flats found in building " . $building['name'], 404);
+        }
+
+        $createdInvoices = [];
+        foreach ($flatsList as $flat) {
+          $residentToBill = $flat['tenant_id'] ?? $flat['owner_id'] ?? null;
+          $invoiceNumber = $this->generateInvoiceNumber($user['society_id']);
+
+          $invoiceId = $this->insert('invoices', [
+            'invoice_number' => $invoiceNumber,
+            'flat_id' => $flat['id'],
+            'resident_id' => $residentToBill,
+            'society_id' => $user['society_id'],
+            'invoice_date' => $invoiceDate,
+            'due_date' => $dueDate,
+            'total_amount' => $totalAmount,
+            'total_gst' => $totalGst,
+            'total_discount' => $data['total_discount'] ?? 0,
+            'arrears_amount' => $data['arrears_amount'] ?? 0,
+            'fine_amount' => $data['fine_amount'] ?? 0,
+            'status' => 'pending',
+            'notes' => $data['notes'] ?? null,
+            'created_by' => $user['uid']
+          ]);
+
+          // Insert items
+          foreach ($data['items'] as $item) {
+            $itemTotal = ($item['quantity'] ?? 1) * $item['unit_price'];
+            $itemGst = $itemTotal * ($item['gst_rate'] ?? 0) / 100;
+            $this->insert('invoice_items', [
+              'invoice_id' => $invoiceId,
+              'charge_head_id' => $item['charge_head_id'],
+              'description' => $item['description'] ?? null,
+              'quantity' => $item['quantity'] ?? 1,
+              'unit_price' => $item['unit_price'],
+              'gst_rate' => $item['gst_rate'] ?? 0,
+              'gst_amount' => $itemGst,
+              'total_amount' => $itemTotal
+            ]);
+          }
+
+          // Push Notification to resident
+          if ($residentToBill) {
+            try {
+              $notificationHelper->sendPushNotification(
+                $residentToBill,
+                "New Invoice Generated",
+                "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
+                ['invoice_id' => $invoiceId],
+                'invoice_generated',
+                $invoiceId,
+                '/accounting/invoices'
+              );
+            } catch (\Exception $ignored) {}
+          }
+
+          $createdInvoices[] = [
+            'invoice_id' => $invoiceId,
+            'invoice_number' => $invoiceNumber,
+            'flat_number' => $flat['flat_number']
+          ];
+        }
+
+        Response::success("Invoices generated successfully for all flats in Building " . $building['name'], [
+          'building_name' => $building['name'],
+          'total_invoices' => count($createdInvoices),
+          'invoices' => $createdInvoices
+        ], 201);
+        return;
+      }
+
+      // ========================================================
+      // CASE 2: SINGLE FLAT INVOICE CREATION
+      // ========================================================
+      $errors = $this->validateRequiredFields($data, ['flat_id']);
+      if (!empty($errors)) {
+        Response::validationError($errors);
+      }
+
+      // Check if flat exists and belongs to the same society
+      $stmt = $this->db->prepare("SELECT id, owner_id, tenant_id FROM flats WHERE id = ? AND society_id = ?");
+      $stmt->execute([$data['flat_id'], $user['society_id']]);
+      $flat = $stmt->fetch();
+      if (!$flat) {
+        Response::notFound("Flat not found in your society");
+      }
+
+      $residentId = !empty($data['resident_id']) ? $data['resident_id'] : ($flat['tenant_id'] ?? $flat['owner_id'] ?? null);
+
       // Generate invoice number
       $invoiceNumber = $this->generateInvoiceNumber($user['society_id']);
       
@@ -198,10 +286,10 @@ class AccountingController extends BaseController {
       $invoiceId = $this->insert('invoices', [
         'invoice_number' => $invoiceNumber,
         'flat_id' => $data['flat_id'],
-        'resident_id' => $data['resident_id'] ?? null,
+        'resident_id' => $residentId,
         'society_id' => $user['society_id'],
-        'invoice_date' => $data['invoice_date'],
-        'due_date' => $data['due_date'] ?? null,
+        'invoice_date' => $invoiceDate,
+        'due_date' => $dueDate,
         'total_amount' => $totalAmount,
         'total_gst' => $totalGst,
         'total_discount' => $data['total_discount'] ?? 0,
@@ -214,7 +302,7 @@ class AccountingController extends BaseController {
       
       // Insert invoice items
       foreach ($data['items'] as $item) {
-        $itemTotal = $item['quantity'] * $item['unit_price'];
+        $itemTotal = ($item['quantity'] ?? 1) * $item['unit_price'];
         $itemGst = $itemTotal * ($item['gst_rate'] ?? 0) / 100;
         
         $this->insert('invoice_items', [
@@ -230,40 +318,21 @@ class AccountingController extends BaseController {
       }
       
       // Notify Resident (if mapped)
-      if (!empty($data['resident_id'])) {
-          $notificationHelper = new NotificationHelper();
+      if ($residentId) {
+        try {
           $notificationHelper->sendPushNotification(
-              $data['resident_id'],
-              "New Invoice Generated",
-              "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
-              ['invoice_id' => $invoiceId],
-              'invoice_generated',
-              $invoiceId,
-              '/accounting/invoices'
+            $residentId,
+            "New Invoice Generated",
+            "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
+            ['invoice_id' => $invoiceId],
+            'invoice_generated',
+            $invoiceId,
+            '/accounting/invoices'
           );
-      } else {
-          // Find resident for flat
-          $stmt = $this->db->prepare("SELECT owner_id, tenant_id FROM flats WHERE id = ?");
-          $stmt->execute([$data['flat_id']]);
-          $flat = $stmt->fetch();
-          if ($flat) {
-              $residentToNotify = $flat['tenant_id'] ?? $flat['owner_id'];
-              if ($residentToNotify) {
-                  $notificationHelper = new NotificationHelper();
-                  $notificationHelper->sendPushNotification(
-                      $residentToNotify,
-                      "New Invoice Generated",
-                      "Invoice {$invoiceNumber} for amount ₹{$totalAmount} has been generated.",
-                      ['invoice_id' => $invoiceId],
-                      'invoice_generated',
-                      $invoiceId,
-                      '/accounting/invoices'
-                  );
-              }
-          }
+        } catch (\Exception $ignored) {}
       }
 
-      Response::success("Invoice created successfully", ['invoice_id' => $invoiceId], 201);
+      Response::success("Invoice created successfully", ['invoice_id' => $invoiceId, 'invoice_number' => $invoiceNumber], 201);
       
     } catch(Exception $e) {
       error_log("Create invoice error: " . $e->getMessage());

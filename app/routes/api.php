@@ -491,6 +491,12 @@ try {
     if ($uri === '/api/notifications/tokens/unregister' && $method === 'POST') {
         (new NotificationController)->unregisterDeviceToken();
     }
+    if ($uri === '/api/notifications/send' && $method === 'POST') {
+        (new NotificationController)->sendCustomNotification();
+    }
+    if ($uri === '/api/notifications/sent-history' && $method === 'GET') {
+        (new NotificationController)->getSentNotifications();
+    }
 
     // Family Routes
     if ($uri === '/api/family' && $method === 'GET') {

@@ -155,4 +155,174 @@ class NotificationController extends BaseController
             Response::error("Failed to unregister device token: " . $e->getMessage(), 500);
         }
     }
+
+    // ─── POST /api/notifications/send ────────────────────────────────────────
+    // Allows society admin to send:
+    // 1) Specific resident/user oriented notification (target_type = 'resident', user_id)
+    // 2) Specific wing/building wise notification (target_type = 'building', building_id)
+    public function sendCustomNotification()
+    {
+        try {
+            $user = $this->auth->authorizeAny(['admin', 'super_admin']);
+            $societyId = $user['society_id'];
+
+            $data = json_decode(file_get_contents("php://input"), true) ?? [];
+
+            $title = trim($data['title'] ?? '');
+            $message = trim($data['message'] ?? '');
+            $targetType = trim($data['target_type'] ?? 'resident'); // 'resident' | 'building'
+            $type = trim($data['type'] ?? 'general'); // 'alert', 'notice', 'general', 'maintenance'
+            $isUrgent = !empty($data['is_urgent']) ? true : false;
+
+            if (empty($title) || empty($message)) {
+                Response::error("Title and message are required", 400);
+                return;
+            }
+
+            // Ensure notifications table has necessary columns
+            try {
+                $cols = $this->db->query("SHOW COLUMNS FROM notifications LIKE 'type'")->fetch();
+                if (!$cols) {
+                    $this->db->exec("ALTER TABLE notifications ADD COLUMN type VARCHAR(50) DEFAULT 'general' AFTER message");
+                }
+                $colsRef = $this->db->query("SHOW COLUMNS FROM notifications LIKE 'reference_id'")->fetch();
+                if (!$colsRef) {
+                    $this->db->exec("ALTER TABLE notifications ADD COLUMN reference_id VARCHAR(100) DEFAULT NULL AFTER type");
+                }
+                $colsAct = $this->db->query("SHOW COLUMNS FROM notifications LIKE 'action_url'")->fetch();
+                if (!$colsAct) {
+                    $this->db->exec("ALTER TABLE notifications ADD COLUMN action_url VARCHAR(255) DEFAULT NULL AFTER reference_id");
+                }
+            } catch (\Exception $ignored) {}
+
+            require_once __DIR__ . '/../../helpers/notification_helper.php';
+            $notificationHelper = new NotificationHelper();
+
+            $recipientUserIds = [];
+            $targetDetails = '';
+
+            if ($targetType === 'resident') {
+                $targetUserId = isset($data['user_id']) ? (int)$data['user_id'] : 0;
+                if ($targetUserId <= 0) {
+                    Response::error("Valid resident user_id is required", 400);
+                    return;
+                }
+
+                // Verify resident exists and belongs to the admin's society
+                $checkStmt = $this->db->prepare("SELECT id, name, phone FROM users WHERE id = ? AND society_id = ? AND status = 'active'");
+                $checkStmt->execute([$targetUserId, $societyId]);
+                $targetUser = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$targetUser) {
+                    Response::error("Resident user not found in this society or is inactive", 404);
+                    return;
+                }
+
+                $recipientUserIds = [$targetUserId];
+                $targetDetails = "Resident: " . $targetUser['name'];
+            } elseif ($targetType === 'building') {
+                $buildingId = isset($data['building_id']) ? (int)$data['building_id'] : 0;
+                if ($buildingId <= 0) {
+                    Response::error("Valid building_id is required", 400);
+                    return;
+                }
+
+                // Verify building belongs to this society
+                $bStmt = $this->db->prepare("SELECT id, name FROM buildings WHERE id = ? AND society_id = ?");
+                $bStmt->execute([$buildingId, $societyId]);
+                $building = $bStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$building) {
+                    Response::error("Building / Wing not found in this society", 404);
+                    return;
+                }
+
+                // Get all owners and tenants of flats in this building
+                $fStmt = $this->db->prepare("
+                    SELECT DISTINCT u.id
+                    FROM users u
+                    INNER JOIN flats f ON (f.owner_id = u.id OR f.tenant_id = u.id)
+                    WHERE f.building_id = ? AND f.society_id = ? AND u.status = 'active'
+                ");
+                $fStmt->execute([$buildingId, $societyId]);
+                $recipientUserIds = $fStmt->fetchAll(PDO::FETCH_COLUMN);
+
+                $targetDetails = "Wing/Building: " . $building['name'];
+
+                if (empty($recipientUserIds)) {
+                    Response::error("No active residents found in Building " . $building['name'], 404);
+                    return;
+                }
+            } else {
+                Response::error("Invalid target_type. Expected 'resident' or 'building'", 400);
+                return;
+            }
+
+            // Prefix title if marked urgent
+            $finalTitle = $isUrgent ? "🚨 " . $title : $title;
+            $notificationType = $isUrgent ? 'alert' : $type;
+
+            $metaData = [
+                'target_type' => $targetType,
+                'target_details' => $targetDetails,
+                'sent_by_name' => $user['name'] ?? 'Admin',
+                'is_urgent' => $isUrgent ? '1' : '0'
+            ];
+
+            $result = $notificationHelper->sendBulkNotifications(
+                $recipientUserIds,
+                $finalTitle,
+                $message,
+                $metaData,
+                $notificationType,
+                null,
+                '/resident-notifications'
+            );
+
+            Response::success("Alert/Notification broadcasted successfully", [
+                'target_type' => $targetType,
+                'target_details' => $targetDetails,
+                'total_recipients' => count($recipientUserIds),
+                'success_count' => $result['success_count'] ?? count($recipientUserIds),
+            ]);
+        } catch (Exception $e) {
+            error_log("Send custom notification error: " . $e->getMessage());
+            Response::error("Failed to send notification: " . $e->getMessage(), 500);
+        }
+    }
+
+    // ─── GET /api/notifications/sent-history ─────────────────────────────────
+    // History of notifications sent out in this society
+    public function getSentNotifications()
+    {
+        try {
+            $user = $this->auth->authorizeAny(['admin', 'super_admin']);
+            $societyId = $user['society_id'];
+
+            $limit = isset($_GET['limit']) ? min(100, max(1, (int)$_GET['limit'])) : 30;
+
+            $stmt = $this->db->prepare("
+                SELECT n.id, n.title, n.message, n.type, n.created_at, n.is_read,
+                       u.id AS user_id, u.name AS recipient_name, u.phone AS recipient_phone,
+                       (SELECT CONCAT(b.name, '-', f.flat_number)
+                        FROM flats f
+                        LEFT JOIN buildings b ON f.building_id = b.id
+                        WHERE (f.owner_id = u.id OR f.tenant_id = u.id)
+                        LIMIT 1) AS flat_number
+                FROM notifications n
+                INNER JOIN users u ON n.user_id = u.id
+                WHERE u.society_id = ?
+                ORDER BY n.created_at DESC
+                LIMIT ?
+            ");
+            $stmt->bindValue(1, $societyId, PDO::PARAM_INT);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            Response::success("Sent notifications history retrieved", $logs);
+        } catch (Exception $e) {
+            Response::error("Failed to fetch notification history: " . $e->getMessage(), 500);
+        }
+    }
 }
