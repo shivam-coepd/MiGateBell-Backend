@@ -336,18 +336,40 @@ class VisitorsController extends BaseController {
         }
       }
       
-      // Check if visitor exists and belongs to the same society
-      $stmt = $this->db->prepare("SELECT id, status, resident_id FROM visitors WHERE id = ? AND society_id = ?");
-      $stmt->execute([$id, $user['society_id']]);
+      // Check if visitor exists
+      $stmt = $this->db->prepare("SELECT id, status, resident_id, society_id, guard_id FROM visitors WHERE id = ?");
+      $stmt->execute([$id]);
       $visitor = $stmt->fetch();
       
       if (!$visitor) {
         Response::notFound("Visitor not found");
       }
       
-      // Residents can only update status for their own visitors
-      if ($user['role'] === 'resident' && $visitor['resident_id'] != $user['uid']) {
-        Response::forbidden("Residents can only update status for their own visitors");
+      // Society match check (if user has a society_id and visitor has a society_id)
+      if (!empty($user['society_id']) && !empty($visitor['society_id']) && $user['society_id'] != $visitor['society_id']) {
+        Response::forbidden("Visitor belongs to a different society");
+      }
+      
+      // Residents can only update status for their own visitors (or visitors destined for their flat)
+      if ($user['role'] === 'resident') {
+        $isOwnVisitor = ($visitor['resident_id'] == $user['uid']);
+        if (!$isOwnVisitor) {
+          // Check if resident belongs to the same flat as the visitor's resident
+          $stmtFlat = $this->db->prepare("
+            SELECT u1.flat_id 
+            FROM users u1 
+            JOIN users u2 ON u1.flat_id = u2.flat_id 
+            WHERE u1.id = ? AND u2.id = ? AND u1.flat_id IS NOT NULL
+          ");
+          $stmtFlat->execute([$user['uid'], $visitor['resident_id']]);
+          if ($stmtFlat->fetch()) {
+            $isOwnVisitor = true;
+          }
+        }
+
+        if (!$isOwnVisitor) {
+          Response::forbidden("Residents can only update status for their own flat's visitors");
+        }
       }
       
       // Update fields based on status
@@ -360,56 +382,64 @@ class VisitorsController extends BaseController {
       }
       
       // Update visitor
-      $updated = $this->update('visitors', $updateData, 'id = :id', ['id' => $id]);
-      
-      if ($updated === 0) {
+      $this->update('visitors', $updateData, 'id = :id', ['id' => $id]);
+
+      // Verify that status is now updated in DB
+      $stmtCheck = $this->db->prepare("SELECT status FROM visitors WHERE id = ?");
+      $stmtCheck->execute([$id]);
+      $currentStatus = $stmtCheck->fetchColumn();
+      if ($currentStatus !== $data['status']) {
         Response::error("Failed to update visitor status", 500);
       }
 
-      // FIREBASE NOTIFICATION
-      $notificationHelper = new NotificationHelper();
-      if ($user['role'] === 'resident' && in_array($data['status'], ['approved', 'rejected'])) {
-          // Notify the guard who created the record, or all guards
-          $guardId = $visitor['guard_id'] ?? null;
-          $message = $data['status'] === 'approved' ? "Entry Approved" : "Entry Denied";
-          
-          if ($guardId) {
-             $notificationHelper->sendPushNotification(
-                 $guardId,
-                 "Visitor Status Update",
-                 "Resident has {$data['status']} the visitor.",
-                 ['visitor_id' => $id],
-                 'visitor_status',
-                 $id,
-                 '/guard/visitor_details'
-             );
-          } else {
-             $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'guard' AND society_id = ?");
-             $stmt->execute([$user['society_id']]);
-             $guards = $stmt->fetchAll(PDO::FETCH_COLUMN);
-             if (!empty($guards)) {
-                 $notificationHelper->sendBulkNotifications(
-                     $guards,
-                     "Visitor Status Update",
-                     "Resident has {$data['status']} the visitor.",
-                     ['visitor_id' => $id],
-                     'visitor_status',
-                     $id,
-                     '/guard/visitor_details'
-                 );
-             }
-          }
-      } else if (in_array($data['status'], ['entered', 'exited'])) {
-          // Notify Resident
-          $notificationHelper->sendPushNotification(
-              $visitor['resident_id'],
-              "Visitor Update",
-              "Your visitor has {$data['status']} the premises.",
-              ['visitor_id' => $id],
-              'visitor_status',
-              $id,
-              '/visitor_details'
-          );
+      // FIREBASE NOTIFICATION (Wrapped in try/catch so push notification errors never break visitor approval)
+      try {
+        $notificationHelper = new NotificationHelper();
+        if ($user['role'] === 'resident' && in_array($data['status'], ['approved', 'rejected'])) {
+            // Notify the guard who created the record, or all guards
+            $guardId = $visitor['guard_id'] ?? null;
+            $message = $data['status'] === 'approved' ? "Entry Approved" : "Entry Denied";
+            
+            if ($guardId) {
+               $notificationHelper->sendPushNotification(
+                   $guardId,
+                   "Visitor Status Update",
+                   "Resident has {$data['status']} the visitor.",
+                   ['visitor_id' => $id],
+                   'visitor_status',
+                   $id,
+                   '/guard/visitor_details'
+               );
+            } else if (!empty($user['society_id'])) {
+               $stmt = $this->db->prepare("SELECT id FROM users WHERE role = 'guard' AND society_id = ?");
+               $stmt->execute([$user['society_id']]);
+               $guards = $stmt->fetchAll(PDO::FETCH_COLUMN);
+               if (!empty($guards)) {
+                   $notificationHelper->sendBulkNotifications(
+                       $guards,
+                       "Visitor Status Update",
+                       "Resident has {$data['status']} the visitor.",
+                       ['visitor_id' => $id],
+                       'visitor_status',
+                       $id,
+                       '/guard/visitor_details'
+                   );
+               }
+            }
+        } else if (in_array($data['status'], ['entered', 'exited']) && !empty($visitor['resident_id'])) {
+            // Notify Resident
+            $notificationHelper->sendPushNotification(
+                $visitor['resident_id'],
+                "Visitor Update",
+                "Your visitor has {$data['status']} the premises.",
+                ['visitor_id' => $id],
+                'visitor_status',
+                $id,
+                '/visitor_details'
+            );
+        }
+      } catch (Exception $notifEx) {
+        error_log("Push notification failed during visitor status update: " . $notifEx->getMessage());
       }
       
       Response::success("Visitor status updated successfully", $updateData);
