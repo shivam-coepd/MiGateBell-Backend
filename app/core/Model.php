@@ -40,6 +40,9 @@ class Model {
       if (!$deviceTime && isset($_SERVER['HTTP_X_DEVICE_TIME'])) {
           $deviceTime = $_SERVER['HTTP_X_DEVICE_TIME'];
       }
+      if (!$deviceTime) {
+          $deviceTime = date('Y-m-d H:i:s');
+      }
 
       if ($deviceTime) {
           // Check if table has created_at and updated_at
@@ -86,6 +89,9 @@ class Model {
       }
       if (!$deviceTime && isset($_SERVER['HTTP_X_DEVICE_TIME'])) {
           $deviceTime = $_SERVER['HTTP_X_DEVICE_TIME'];
+      }
+      if (!$deviceTime) {
+          $deviceTime = date('Y-m-d H:i:s');
       }
 
       if ($deviceTime) {

@@ -9,6 +9,9 @@ error_reporting(E_ALL);
 // Buffer all output so stray warnings/notices don't corrupt JSON responses
 ob_start();
 
+// Set default timezone to Indian Standard Time (Asia/Kolkata, UTC+05:30)
+date_default_timezone_set('Asia/Kolkata');
+
 // Include composer autoloader for dependencies (like Google Auth for FCM)
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';

@@ -16,6 +16,8 @@ class Database {
         );
         // Align connection collation with modern defaults (avoids ER_CANT_AGGREGATE_2COLLATIONS vs legacy utf8mb4_general_ci columns when combined with explicit COLLATE in queries).
         self::$db->exec('SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci');
+        // Ensure MySQL session timezone is set to Indian Standard Time (+05:30)
+        self::$db->exec("SET time_zone = '+05:30'");
       } catch(PDOException $e) {
         throw new Exception("Database connection failed: " . $e->getMessage());
       }

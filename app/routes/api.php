@@ -1,4 +1,9 @@
 <?php
+// Ensure timezone is set to IST (Asia/Kolkata, UTC+05:30) for all API requests
+if (date_default_timezone_get() !== 'Asia/Kolkata') {
+    date_default_timezone_set('Asia/Kolkata');
+}
+
 // Load all required files
 require_once __DIR__ . '/../helpers/jwt_helper.php';
 require_once __DIR__ . '/../helpers/uploader.php';
