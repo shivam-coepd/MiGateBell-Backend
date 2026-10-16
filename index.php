@@ -1,5 +1,5 @@
 <?php
-// MyGate Backend Entry Point
+// MyGateBell Backend Entry Point
 
 // 1. Error handling — log errors but NEVER display them (would corrupt JSON)
 ini_set('display_errors', 0);

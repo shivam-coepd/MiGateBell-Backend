@@ -1,10 +1,10 @@
-# MyGate Backend - FULL VERSION
+# MyGateBell Backend - FULL VERSION
 
-A comprehensive, scalable backend solution for the MyGate property management system, implementing all features from the official MyGate offerings.
+A comprehensive, scalable backend solution for the MyGateBell property management system, implementing all features from the official MyGateBell offerings.
 
 ## Features Implemented
 
-This backend covers all the offerings mentioned on the MyGate website:
+This backend covers all the offerings mentioned on the MyGateBell website:
 
 1. **Accounting ERP** - Complete accounting system with chart of accounts, invoicing, payments, and financial reporting
 2. **Payment Infrastructure** - Multi-mode payment processing with various gateways
@@ -25,23 +25,23 @@ This backend covers all the offerings mentioned on the MyGate website:
 17. **COVID Safety Features** - Vaccination and testing tracking
 18. **Enhanced Registration Flow** - Live search societies, building selection, and flat lookup for fast mobile registration
 
-1. **Accounting ERP** - Complete accounting system with chart of accounts, invoicing, payments, and financial reporting
-2. **Payment Infrastructure** - Multi-mode payment processing with various gateways
-3. **Communications** - Group messaging, announcements, polls, and meeting management
-4. **Amenities Module** - Booking and management of society amenities
-5. **Digital Helpdesk** - Ticketing system for resident issues
-6. **Asset & Inventory Management** - Tracking of society assets and inventory
-7. **Security Features** - Resident, admin, and guard security features
-8. **Vehicle & Parking Management** - Vehicle registration and parking allocation
-9. **Admin Dashboard** - Comprehensive admin controls
-10. **Admin Roles & Access Control** - Role-based permissions system
-11. **Pet Directory** - Pet registration and management
-12. **Marketplace & eCommerce** - Community marketplace functionality
-13. **Integrations & Partnerships** - Extensible integration framework
-14. **Data Security and Privacy** - Audit trails and privacy controls
-15. **Interfaces** - RESTful API interfaces
-16. **Services & Trainings** - Service booking and management
-17. **COVID Safety Features** - Vaccination and testing tracking
+19. **Accounting ERP** - Complete accounting system with chart of accounts, invoicing, payments, and financial reporting
+20. **Payment Infrastructure** - Multi-mode payment processing with various gateways
+21. **Communications** - Group messaging, announcements, polls, and meeting management
+22. **Amenities Module** - Booking and management of society amenities
+23. **Digital Helpdesk** - Ticketing system for resident issues
+24. **Asset & Inventory Management** - Tracking of society assets and inventory
+25. **Security Features** - Resident, admin, and guard security features
+26. **Vehicle & Parking Management** - Vehicle registration and parking allocation
+27. **Admin Dashboard** - Comprehensive admin controls
+28. **Admin Roles & Access Control** - Role-based permissions system
+29. **Pet Directory** - Pet registration and management
+30. **Marketplace & eCommerce** - Community marketplace functionality
+31. **Integrations & Partnerships** - Extensible integration framework
+32. **Data Security and Privacy** - Audit trails and privacy controls
+33. **Interfaces** - RESTful API interfaces
+34. **Services & Trainings** - Service booking and management
+35. **COVID Safety Features** - Vaccination and testing tracking
 
 ## Technology Stack
 
@@ -54,6 +54,7 @@ This backend covers all the offerings mentioned on the MyGate website:
 ## Installation with XAMPP
 
 1. Clone or copy the project to your XAMPP `htdocs` directory:
+
    ```
    C:\xampp\htdocs\mygate-backend-FULL
    ```
@@ -77,6 +78,7 @@ This backend covers all the offerings mentioned on the MyGate website:
 
 6. Configure environment variables:
    The `.env` file is already configured for XAMPP defaults:
+
    ```env
    DB_HOST=localhost
    DB_NAME=migate
@@ -93,7 +95,7 @@ This backend covers all the offerings mentioned on the MyGate website:
 
 ## API Documentation
 
-Comprehensive API documentation is available in [API_DOCUMENTATION.md](file:///s:/MyGate/mymygate-backend-FULL/API_DOCUMENTATION.md)
+Comprehensive API documentation is available in [API_DOCUMENTATION.md](file:///s:/MyGateBell/mymygate-backend-FULL/API_DOCUMENTATION.md)
 
 ## Project Structure
 
@@ -131,6 +133,7 @@ Each feature area is implemented as a separate module:
 ## Testing
 
 Run the basic tests by accessing these URLs in your browser:
+
 - http://localhost/mygate-backend-FULL/public/ - Main test interface
 - http://localhost/mygate-backend-FULL/public/api/test - Simple API test
 - http://localhost/mygate-backend-FULL/public/api/health - Health check

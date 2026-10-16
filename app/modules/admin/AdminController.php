@@ -303,8 +303,8 @@ class AdminController extends BaseController
 
       // Get basic society details
       $stmt = $this->db->prepare("
-        SELECT id, name, address, city, state, country, pincode, 
-               contact_person, contact_phone, contact_email, plan, created_at, updated_at
+        SELECT id, name, code, address, city, state, country, pincode, 
+               towers, total_flats, contact_person, contact_phone, contact_email, plan, created_at, updated_at
         FROM societies WHERE id = ?
       ");
       $stmt->execute([$id]);
@@ -329,8 +329,16 @@ class AdminController extends BaseController
         GROUP BY b.id
         ORDER BY b.name
       ");
-      $stmt->execute([$id]);
-      $societyData['buildings'] = $stmt->fetchAll();
+      $buildingsList = $stmt->fetchAll();
+      $societyData['buildings'] = $buildingsList;
+
+      // Ensure towers and total_flats reflect live building/flat counts if table has 0 or null
+      $calculatedFlats = 0;
+      foreach ($buildingsList as $b) {
+        $calculatedFlats += (int)($b['total_flats'] ?? 0);
+      }
+      $societyData['towers'] = !empty($society['towers']) ? (int)$society['towers'] : count($buildingsList);
+      $societyData['total_flats'] = !empty($society['total_flats']) ? (int)$society['total_flats'] : $calculatedFlats;
 
       // 2. Users Statistics
       $stmt = $this->db->prepare("
