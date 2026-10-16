@@ -139,6 +139,15 @@ try {
         (new AdminController)->createBuilding();
     }
 
+    if (preg_match('/^\/api\/buildings\/(\d+)$/', $uri, $matches)) {
+        if ($method === 'PUT') {
+            (new AdminController)->updateBuilding($matches[1]);
+        }
+        if ($method === 'DELETE') {
+            (new AdminController)->deleteBuilding($matches[1]);
+        }
+    }
+
     if (preg_match('/^\/api\/buildings\/by-society\/([0-9]+)$/', $uri, $matches) && $method === 'GET') {
         (new AdminController)->getBuildingsBySociety($matches[1]);
     }

@@ -735,6 +735,103 @@ class AdminController extends BaseController
     }
   }
 
+  public function updateBuilding($id)
+  {
+    try {
+      $user = $this->auth->authorizeAny(['super_admin', 'admin']);
+      $data = json_decode(file_get_contents("php://input"), true);
+
+      $stmt = $this->db->prepare("SELECT id, society_id, name FROM buildings WHERE id = ?");
+      $stmt->execute([$id]);
+      $building = $stmt->fetch();
+
+      if (!$building) {
+        Response::notFound("Building not found");
+      }
+
+      if ($user['role'] !== 'super_admin') {
+        $this->auth->authorizeWithSociety($building['society_id']);
+      }
+
+      $updateData = [];
+      if (isset($data['name'])) {
+        $name = trim($data['name']);
+        if (empty($name)) {
+          Response::error("Building name cannot be empty");
+        }
+        if (strlen($name) > 100) {
+          Response::error("Building name must be less than 100 characters");
+        }
+
+        // Check for duplicates in same society
+        $dupStmt = $this->db->prepare("SELECT id FROM buildings WHERE name = ? AND society_id = ? AND id != ?");
+        $dupStmt->execute([$name, $building['society_id'], $id]);
+        if ($dupStmt->fetch()) {
+          Response::error("A building with this name already exists in this society", 409);
+        }
+        $updateData['name'] = $name;
+      }
+
+      if (isset($data['total_floors'])) {
+        $floors = (int) $data['total_floors'];
+        if ($floors < 1) {
+          Response::error("Total floors must be at least 1");
+        }
+        $updateData['total_floors'] = $floors;
+      }
+
+      if (array_key_exists('description', $data)) {
+        $updateData['description'] = $data['description'];
+      }
+
+      if (empty($updateData)) {
+        Response::error("No fields to update");
+      }
+
+      $this->update('buildings', $updateData, 'id = :id', ['id' => $id]);
+      Response::success("Building updated successfully", $updateData);
+
+    } catch (Exception $e) {
+      error_log("Update building error: " . $e->getMessage());
+      Response::error("Failed to update building: " . $e->getMessage(), 500);
+    }
+  }
+
+  public function deleteBuilding($id)
+  {
+    try {
+      $user = $this->auth->authorizeAny(['super_admin', 'admin']);
+
+      $stmt = $this->db->prepare("SELECT id, society_id, name FROM buildings WHERE id = ?");
+      $stmt->execute([$id]);
+      $building = $stmt->fetch();
+
+      if (!$building) {
+        Response::notFound("Building not found");
+      }
+
+      if ($user['role'] !== 'super_admin') {
+        $this->auth->authorizeWithSociety($building['society_id']);
+      }
+
+      // Check if flats exist in this building
+      $fStmt = $this->db->prepare("SELECT COUNT(*) as count FROM flats WHERE building_id = ?");
+      $fStmt->execute([$id]);
+      $flatCount = (int) $fStmt->fetch()['count'];
+
+      if ($flatCount > 0) {
+        Response::error("Cannot delete building because it contains $flatCount flat(s). Delete or reassign flats first.", 400);
+      }
+
+      $this->delete('buildings', 'id = ?', [$id]);
+      Response::success("Building deleted successfully");
+
+    } catch (Exception $e) {
+      error_log("Delete building error: " . $e->getMessage());
+      Response::error("Failed to delete building: " . $e->getMessage(), 500);
+    }
+  }
+
   public function getBuildingsBySociety($societyId)
   {
     try {
