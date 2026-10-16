@@ -1297,7 +1297,7 @@ class AdminController extends BaseController
    }
  
     /**
-     * Delete flat details
+     * Delete flat details safely with related records handled
      */
     public function deleteFlat($id)
     {
@@ -1318,21 +1318,68 @@ class AdminController extends BaseController
           $this->auth->authorizeWithSociety($flat['society_id']);
         }
 
-        $usersToDelete = [];
-        if ($flat['owner_id']) $usersToDelete[] = $flat['owner_id'];
-        if ($flat['tenant_id']) $usersToDelete[] = $flat['tenant_id'];
+        $usersToCheck = [];
+        if (!empty($flat['owner_id'])) $usersToCheck[] = (int) $flat['owner_id'];
+        if (!empty($flat['tenant_id'])) $usersToCheck[] = (int) $flat['tenant_id'];
 
         $this->db->beginTransaction();
 
+        // 1. Unlink invoices referencing this flat to preserve billing records while removing constraint dependency
+        $this->db->prepare("UPDATE invoices SET flat_id = NULL WHERE flat_id = ?")->execute([$id]);
+
+        // 2. Remove daily helpers and logs specifically linked to this flat
+        $this->db->prepare("DELETE FROM daily_helper_logs WHERE flat_id = ?")->execute([$id]);
+        $this->db->prepare("DELETE FROM daily_helpers WHERE flat_id = ?")->execute([$id]);
+
+        // 3. Delete the flat
         $deleted = $this->delete('flats', 'id = ?', [$id]);
         
         if ($deleted === 0) {
             $this->db->rollBack();
             Response::error("Failed to delete flat", 500);
+            return;
         }
 
-        foreach ($usersToDelete as $userId) {
-           $this->delete('users', 'id = ?', [$userId]);
+        // 4. Safely handle associated users (never delete admins, guards, staff, or users with other flats/dependencies)
+        foreach (array_unique($usersToCheck) as $userId) {
+            // Check user existence and role
+            $uStmt = $this->db->prepare("SELECT id, role FROM users WHERE id = ?");
+            $uStmt->execute([$userId]);
+            $uRow = $uStmt->fetch();
+
+            if (!$uRow || in_array($uRow['role'], ['super_admin', 'admin', 'guard', 'staff'])) {
+                continue; // Do not touch administrative accounts
+            }
+
+            // Check if user is associated with any other flats
+            $otherFlatsStmt = $this->db->prepare("SELECT COUNT(*) as count FROM flats WHERE (owner_id = ? OR tenant_id = ?)");
+            $otherFlatsStmt->execute([$userId, $userId]);
+            $otherCount = (int) $otherFlatsStmt->fetch()['count'];
+
+            if ($otherCount > 0) {
+                continue; // User still owns/rents other flats
+            }
+
+            // Check for related data in other tables (invoices, payments, tickets, vehicles, family members, etc.)
+            $depStmt = $this->db->prepare("
+                SELECT (
+                    (SELECT COUNT(*) FROM invoices WHERE resident_id = ?) +
+                    (SELECT COUNT(*) FROM payments WHERE resident_id = ?) +
+                    (SELECT COUNT(*) FROM tickets WHERE resident_id = ?) +
+                    (SELECT COUNT(*) FROM vehicles WHERE resident_id = ?) +
+                    (SELECT COUNT(*) FROM family_members WHERE resident_id = ?)
+                ) as total_deps
+            ");
+            $depStmt->execute([$userId, $userId, $userId, $userId, $userId]);
+            $totalDeps = (int) $depStmt->fetch()['total_deps'];
+
+            if ($totalDeps > 0) {
+                // If user has historical activity, mark as inactive to prevent breaking financial or ticket records
+                $this->update('users', ['status' => 'inactive'], 'id = :id', ['id' => $userId]);
+            } else {
+                // Safe to remove cleanly
+                $this->delete('users', 'id = ?', [$userId]);
+            }
         }
 
         $this->db->commit();
