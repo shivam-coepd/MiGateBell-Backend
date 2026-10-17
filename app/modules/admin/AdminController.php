@@ -332,13 +332,29 @@ class AdminController extends BaseController
       $buildingsList = $stmt->fetchAll();
       $societyData['buildings'] = $buildingsList;
 
-      // Ensure towers and total_flats reflect live building/flat counts if table has 0 or null
+      // Calculate total flats across all buildings in the society
       $calculatedFlats = 0;
       foreach ($buildingsList as $b) {
         $calculatedFlats += (int)($b['total_flats'] ?? 0);
       }
-      $societyData['towers'] = !empty($society['towers']) ? (int)$society['towers'] : count($buildingsList);
-      $societyData['total_flats'] = !empty($society['total_flats']) ? (int)$society['total_flats'] : $calculatedFlats;
+
+      // Query total flats directly for this society as a safety check
+      $flatStmt = $this->db->prepare("
+        SELECT COUNT(*) as count 
+        FROM flats 
+        WHERE society_id = ? OR building_id IN (SELECT id FROM buildings WHERE society_id = ?)
+      ");
+      $flatStmt->execute([$id, $id]);
+      $liveFlatsCount = (int) ($flatStmt->fetch()['count'] ?? 0);
+      $totalFlats = max($calculatedFlats, $liveFlatsCount);
+
+      $totalBuildings = count($buildingsList);
+
+      // Total Towers is the actual number of buildings in the society
+      $societyData['towers'] = $totalBuildings;
+      $societyData['total_buildings'] = $totalBuildings;
+      // Total Flats is the actual count of all flats across all buildings
+      $societyData['total_flats'] = $totalFlats;
 
       // 2. Users Statistics
       $stmt = $this->db->prepare("
@@ -858,12 +874,17 @@ class AdminController extends BaseController
         Response::notFound("Society not found");
       }
 
-      // Get buildings for society
+      // Get buildings for society with flat counts
       $stmt = $this->db->prepare("
-        SELECT id, name, total_floors, description
-        FROM buildings 
-        WHERE society_id = ?
-        ORDER BY name
+        SELECT b.id, b.name, b.total_floors, b.description, b.created_at,
+               COUNT(DISTINCT f.id) as total_flats,
+               COUNT(DISTINCT CASE WHEN f.is_occupied = 1 THEN f.id END) as occupied_flats,
+               COUNT(DISTINCT CASE WHEN f.is_occupied = 0 OR f.is_occupied IS NULL THEN f.id END) as available_flats
+        FROM buildings b 
+        LEFT JOIN flats f ON b.id = f.building_id
+        WHERE b.society_id = ?
+        GROUP BY b.id
+        ORDER BY b.name
       ");
       $stmt->execute([$societyId]);
       $buildings = $stmt->fetchAll();
