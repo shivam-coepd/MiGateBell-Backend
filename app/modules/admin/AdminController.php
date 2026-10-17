@@ -318,17 +318,29 @@ class AdminController extends BaseController
       $societyData = $society;
 
       // 1. Buildings and Flats
+      // Auto-heal any buildings whose society_id is NULL but are referenced by flats in this society
+      try {
+        $this->db->prepare("
+          UPDATE buildings b
+          JOIN flats f ON b.id = f.building_id
+          SET b.society_id = f.society_id
+          WHERE b.society_id IS NULL AND f.society_id = ?
+        ")->execute([$id]);
+      } catch (Exception $e) {
+        // Non-fatal if update cannot be performed
+      }
+
       $stmt = $this->db->prepare("
         SELECT b.id, b.name, b.total_floors, b.description, b.created_at,
-               COUNT(DISTINCT f.id) as total_flats,
-               COUNT(DISTINCT CASE WHEN f.is_occupied = 1 THEN f.id END) as occupied_flats,
-               COUNT(DISTINCT CASE WHEN f.is_occupied = 0 OR f.is_occupied IS NULL THEN f.id END) as available_flats
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id) as total_flats,
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id AND f.is_occupied = 1) as occupied_flats,
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id AND (f.is_occupied = 0 OR f.is_occupied IS NULL)) as available_flats
         FROM buildings b
-        LEFT JOIN flats f ON b.id = f.building_id
-        WHERE b.society_id = ?
-        GROUP BY b.id
+        WHERE b.society_id = ? 
+           OR b.id IN (SELECT DISTINCT building_id FROM flats WHERE society_id = ? AND building_id IS NOT NULL)
         ORDER BY b.name
       ");
+      $stmt->execute([$id, $id]);
       $buildingsList = $stmt->fetchAll();
       $societyData['buildings'] = $buildingsList;
 
@@ -348,7 +360,22 @@ class AdminController extends BaseController
       $liveFlatsCount = (int) ($flatStmt->fetch()['count'] ?? 0);
       $totalFlats = max($calculatedFlats, $liveFlatsCount);
 
+      // Distinct buildings count from flats as safety check
+      $dbfStmt = $this->db->prepare("
+        SELECT COUNT(DISTINCT building_id) as count 
+        FROM flats 
+        WHERE society_id = ? AND building_id IS NOT NULL AND building_id > 0
+      ");
+      $dbfStmt->execute([$id]);
+      $distinctBuildingsFromFlats = (int) ($dbfStmt->fetch()['count'] ?? 0);
+
       $totalBuildings = count($buildingsList);
+      if ($totalBuildings === 0 && $distinctBuildingsFromFlats > 0) {
+        $totalBuildings = $distinctBuildingsFromFlats;
+      }
+      if ($totalBuildings === 0 && !empty($society['towers'])) {
+        $totalBuildings = (int) $society['towers'];
+      }
 
       // Total Towers is the actual number of buildings in the society
       $societyData['towers'] = $totalBuildings;
@@ -877,16 +904,15 @@ class AdminController extends BaseController
       // Get buildings for society with flat counts
       $stmt = $this->db->prepare("
         SELECT b.id, b.name, b.total_floors, b.description, b.created_at,
-               COUNT(DISTINCT f.id) as total_flats,
-               COUNT(DISTINCT CASE WHEN f.is_occupied = 1 THEN f.id END) as occupied_flats,
-               COUNT(DISTINCT CASE WHEN f.is_occupied = 0 OR f.is_occupied IS NULL THEN f.id END) as available_flats
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id) as total_flats,
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id AND f.is_occupied = 1) as occupied_flats,
+               (SELECT COUNT(*) FROM flats f WHERE f.building_id = b.id AND (f.is_occupied = 0 OR f.is_occupied IS NULL)) as available_flats
         FROM buildings b 
-        LEFT JOIN flats f ON b.id = f.building_id
-        WHERE b.society_id = ?
-        GROUP BY b.id
+        WHERE b.society_id = ? 
+           OR b.id IN (SELECT DISTINCT building_id FROM flats WHERE society_id = ? AND building_id IS NOT NULL)
         ORDER BY b.name
       ");
-      $stmt->execute([$societyId]);
+      $stmt->execute([$societyId, $societyId]);
       $buildings = $stmt->fetchAll();
 
       Response::success("Buildings retrieved successfully", $buildings);
